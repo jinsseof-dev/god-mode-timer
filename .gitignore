@@ -1,6 +1,7 @@
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
-.env
-venv/
+*.pyc
+build/
+dist/
+*.spec
+pomodoro_log.txt
+.vscode/
