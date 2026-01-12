@@ -7,6 +7,16 @@ import sys
 import ctypes
 import re
 
+# 윈도우 High DPI 설정 (선명하게 보이기 위함)
+if sys.platform == "win32":
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
 class WindowsTaskbar:
     def __init__(self, root):
         self.root = root
@@ -132,7 +142,7 @@ class PomodoroApp:
         arc_radius = radius * 0.7
         
         # 0. 배경 원
-        self.canvas.create_oval(cx-radius, cy-radius, cx+radius, cy+radius, fill="#FFFFFF", outline="#E0E0E0")
+        self.canvas.create_oval(cx-radius, cy-radius, cx+radius, cy+radius, fill="#FFFFFF", outline="black")
         
         # 1. 남은 시간 영역 그리기 (60분 스케일)
         display_time = min(self.current_time, 3600)
@@ -159,7 +169,7 @@ class PomodoroApp:
                 tx = cx + text_radius * math.cos(angle_rad)
                 ty = cy - text_radius * math.sin(angle_rad)
                 font_size = max(8, int(radius * 0.07))
-                self.canvas.create_text(tx, ty, text=str(i if i != 0 else 60), font=("Helvetica", font_size, "bold"), fill="#AAAAAA")
+                self.canvas.create_text(tx, ty, text=str(i if i != 0 else 60), font=("Helvetica", font_size, "bold"), fill="black")
             else:
                 tick_len = 5
                 width = 1
@@ -169,15 +179,15 @@ class PomodoroApp:
             x_in = cx + (radius - tick_len) * math.cos(angle_rad)
             y_in = cy - (radius - tick_len) * math.sin(angle_rad)
             
-            self.canvas.create_line(x_in, y_in, x_out, y_out, fill="#E0E0E0", width=width)
+            self.canvas.create_line(x_in, y_in, x_out, y_out, fill="black", width=width)
             
         # 3. 외곽선
-        self.canvas.create_oval(cx-radius, cy-radius, cx+radius, cy+radius, outline="#E0E0E0", width=2)
+        self.canvas.create_oval(cx-radius, cy-radius, cx+radius, cy+radius, outline="black", width=2)
 
         # 4. 중앙 디지털 시간 표시
         # 테두리를 제거하고 깔끔한 흰색 원으로 변경
         center_radius = radius * 0.175
-        self.canvas.create_oval(cx-center_radius, cy-center_radius, cx+center_radius, cy+center_radius, fill="#F0F0F0", outline="", width=0)
+        self.canvas.create_oval(cx-center_radius, cy-center_radius, cx+center_radius, cy+center_radius, fill="#F0F0F0", outline="black", width=2)
         mins, secs = divmod(int(self.current_time), 60)
         time_str = "{:02d}:{:02d}".format(mins, secs)
         font_size_time = max(10, int(radius * 0.09))
