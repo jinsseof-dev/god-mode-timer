@@ -6,6 +6,8 @@ import math
 import sys
 import ctypes
 import re
+from PIL import Image, ImageDraw, ImageFont, ImageTk
+import os
 
 # 윈도우 High DPI 설정 (선명하게 보이기 위함)
 if sys.platform == "win32":
@@ -16,6 +18,16 @@ if sys.platform == "win32":
             ctypes.windll.user32.SetProcessDPIAware()
         except Exception:
             pass
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 class WindowsTaskbar:
     def __init__(self, root):
@@ -90,6 +102,9 @@ class PomodoroApp:
 
         # 윈도우 작업 표시줄 진행률 초기화
         self.taskbar = WindowsTaskbar(root)
+        
+        # 윈도우 아이콘 설정
+        self.set_window_icon()
 
         # 윈도우 닫기 이벤트 처리
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -99,9 +114,18 @@ class PomodoroApp:
 
         # 상태 변수
         self.is_running = False
-        self.work_time = 25 * 60
-        self.break_time = 5 * 60
+        self.setting_always_on_top = True
+        self.setting_auto_start = False
+        self.setting_sound = True
+        self.setting_work_min = 25
+        self.setting_short_break_min = 5
+        self.setting_long_break_min = 15
+        self.setting_long_break_interval = 4
+        
+        self.work_time = self.setting_work_min * 60
+        self.break_time = self.setting_short_break_min * 60
         self.current_time = self.work_time
+        self.pomodoro_count = 0
         self.mode = "work"  # 'work' or 'break'
 
         # 타이머 표시 (도형)
@@ -125,10 +149,71 @@ class PomodoroApp:
         self.start_button.bind("<Enter>", lambda e: self.start_button.config(bg="#FFC8A0"))
         self.start_button.bind("<Leave>", lambda e: self.update_start_button_color())
 
-        self.reset_button = tk.Button(self.btn_frame, text="↻", font=("Helvetica", 16), width=4, bd=0, bg="#E2F0CB", fg="#555555", pady=3, command=self.reset_timer)
-        self.reset_button.pack(side=tk.LEFT, padx=10)
-        self.reset_button.bind("<Enter>", lambda e: self.reset_button.config(bg="#D0E8B0"))
-        self.reset_button.bind("<Leave>", lambda e: self.reset_button.config(bg="#E2F0CB"))
+        self.settings_button = tk.Button(self.btn_frame, text="⚙", font=("Helvetica", 16), width=4, bd=0, bg="#F0F0F0", fg="#555555", pady=3, command=self.open_settings)
+        self.settings_button.pack(side=tk.LEFT, padx=10)
+        self.settings_button.bind("<Enter>", lambda e: self.settings_button.config(bg="#E0E0E0") if self.settings_button['state'] != tk.DISABLED else None)
+        self.settings_button.bind("<Leave>", lambda e: self.settings_button.config(bg="#F0F0F0") if self.settings_button['state'] != tk.DISABLED else None)
+
+        # 아이콘 이미지 생성
+        self.icon_play = self.create_button_icon("play", "#555555")
+        self.icon_stop = self.create_button_icon("stop", "white")
+        self.icon_settings = self.create_button_icon("settings", "#555555")
+        self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
+        
+        # 버튼에 이미지 적용 (초기 상태)
+        self.start_button.config(image=self.icon_play, text="", width=50, height=40)
+        self.settings_button.config(image=self.icon_settings, text="", width=50, height=40)
+
+        self.tk_image = None
+
+    def set_window_icon(self):
+        # 윈도우 아이콘 동적 생성 (토마토 모양)
+        size = 64
+        image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        # Body
+        draw.ellipse((4, 8, 60, 60), fill="#FF5252", outline="#D32F2F", width=2)
+        # Leaf
+        draw.polygon([(32, 4), (22, 15), (42, 15)], fill="#4CAF50", outline="#388E3C")
+        
+        self.tk_icon = ImageTk.PhotoImage(image)
+        self.root.iconphoto(True, self.tk_icon)
+
+    def create_button_icon(self, shape, color, size=(24, 24)):
+        # 고품질 렌더링을 위한 슈퍼샘플링
+        scale = 4 
+        w, h = size[0] * scale, size[1] * scale
+        image = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        
+        if shape == "play":
+            # 삼각형 (오른쪽 방향)
+            draw.polygon([(w*0.25, h*0.2), (w*0.25, h*0.8), (w*0.85, h*0.5)], fill=color)
+        elif shape == "stop":
+            # 정지(Stop) 아이콘 - 사각형
+            draw.rectangle([(w*0.25, h*0.25), (w*0.75, h*0.75)], fill=color)
+        elif shape == "settings":
+            # 톱니바퀴 아이콘 (Solid)
+            cx, cy = w/2, h/2
+            r_body = w * 0.28
+            r_tooth_start = w * 0.25
+            r_tooth_end = w * 0.42
+            tooth_width = w * 0.14
+            
+            # Draw teeth
+            for i in range(8):
+                angle = math.radians(i * 45)
+                x0 = cx + r_tooth_start * math.cos(angle)
+                y0 = cy + r_tooth_start * math.sin(angle)
+                x1 = cx + r_tooth_end * math.cos(angle)
+                y1 = cy + r_tooth_end * math.sin(angle)
+                draw.line([(x0, y0), (x1, y1)], fill=color, width=int(tooth_width))
+            
+            # Draw body
+            draw.ellipse((cx-r_body, cy-r_body, cx+r_body, cy+r_body), fill=color)
+
+        image = image.resize(size, resample=Image.LANCZOS)
+        return ImageTk.PhotoImage(image)
 
     def draw_timer(self):
         self.canvas.delete("all")
@@ -137,61 +222,87 @@ class PomodoroApp:
         h = self.canvas.winfo_height()
         if w <= 1: w = 320
         if h <= 1: h = 320
-        cx, cy = w / 2, h / 2
-        radius = min(w, h) / 2 * 0.88
+        
+        # 고품질 렌더링을 위한 슈퍼샘플링 (2배 확대 후 축소)
+        scale = 2
+        img_w, img_h = w * scale, h * scale
+        
+        # 투명 배경 대신 캔버스 배경색(#FFF8F0)으로 이미지 생성
+        image = Image.new("RGBA", (img_w, img_h), "#FFF8F0")
+        draw = ImageDraw.Draw(image)
+        
+        cx, cy = img_w / 2, img_h / 2
+        radius = min(img_w, img_h) / 2 * 0.88
         arc_radius = radius * 0.7
         
         # 0. 배경 원
-        self.canvas.create_oval(cx-radius, cy-radius, cx+radius, cy+radius, fill="#FFFFFF", outline="black")
+        draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius), fill="#FFFFFF", outline="black", width=int(2*scale))
         
-        # 1. 남은 시간 영역 그리기 (60분 스케일)
+        # 1. 남은 시간 영역 그리기
         display_time = min(self.current_time, 3600)
         angle = (display_time / 3600) * 360
-        color = "#FFB7B2" if self.mode == "work" else "#B5EAD7"
+        color = "#FF5252" if self.mode == "work" else "#4CAF50"
         
         if display_time >= 3600:
-            self.canvas.create_oval(cx-arc_radius, cy-arc_radius, cx+arc_radius, cy+arc_radius, fill=color, outline=color)
+            draw.ellipse((cx-arc_radius, cy-arc_radius, cx+arc_radius, cy+arc_radius), fill=color, outline=color)
         elif display_time > 0:
-            # 12시(90도)에서 시작, 시계방향(음수 extent)으로 그려짐
-            self.canvas.create_arc(cx-arc_radius, cy-arc_radius, cx+arc_radius, cy+arc_radius, start=90, extent=-angle, fill=color, outline=color)
+            # PIL은 3시 방향이 0도, 시계 방향으로 증가
+            # 12시 방향은 270도
+            start_angle = 270
+            end_angle = 270 + angle
+            draw.pieslice((cx-arc_radius, cy-arc_radius, cx+arc_radius, cy+arc_radius), start=start_angle, end=end_angle, fill=color, outline=color)
 
         # 2. 눈금 그리기 (0~60분)
+        font_size = max(16, int(radius * 0.07))
+        try:
+            font = ImageFont.truetype(resource_path("arialbd.ttf"), font_size)
+        except IOError:
+            font = ImageFont.load_default()
+
         for i in range(60):
             angle_deg = 90 - (i * 6)
             angle_rad = math.radians(angle_deg)
             
             if i % 5 == 0:
-                tick_len = 10
-                width = 2
+                tick_len = 10 * scale
+                width = 2 * scale
                 
                 # 5분 단위 숫자 표시
-                text_radius = radius - 20
+                text_radius = radius - (20 * scale)
                 tx = cx + text_radius * math.cos(angle_rad)
                 ty = cy - text_radius * math.sin(angle_rad)
-                font_size = max(8, int(radius * 0.07))
-                self.canvas.create_text(tx, ty, text=str(i if i != 0 else 60), font=("Helvetica", font_size, "bold"), fill="black")
+                text = str(i if i != 0 else 60)
+                draw.text((tx, ty), text, font=font, fill="black", anchor="mm")
             else:
-                tick_len = 5
-                width = 1
+                tick_len = 5 * scale
+                width = 1 * scale
                 
             x_out = cx + radius * math.cos(angle_rad)
             y_out = cy - radius * math.sin(angle_rad)
             x_in = cx + (radius - tick_len) * math.cos(angle_rad)
             y_in = cy - (radius - tick_len) * math.sin(angle_rad)
             
-            self.canvas.create_line(x_in, y_in, x_out, y_out, fill="black", width=width)
-            
-        # 3. 외곽선
-        self.canvas.create_oval(cx-radius, cy-radius, cx+radius, cy+radius, outline="black", width=2)
+            draw.line((x_in, y_in, x_out, y_out), fill="black", width=int(width))
 
         # 4. 중앙 디지털 시간 표시
-        # 테두리를 제거하고 깔끔한 흰색 원으로 변경
         center_radius = radius * 0.175
-        self.canvas.create_oval(cx-center_radius, cy-center_radius, cx+center_radius, cy+center_radius, fill="#F0F0F0", outline="black", width=2)
+        draw.ellipse((cx-center_radius, cy-center_radius, cx+center_radius, cy+center_radius), fill="#F0F0F0", outline="black", width=int(2*scale))
+        
         mins, secs = divmod(int(self.current_time), 60)
         time_str = "{:02d}:{:02d}".format(mins, secs)
-        font_size_time = max(10, int(radius * 0.09))
-        self.canvas.create_text(cx, cy, text=time_str, font=("Helvetica", font_size_time, "bold"), fill="#555555")
+        
+        font_size_time = max(20, int(radius * 0.09))
+        try:
+            font_time = ImageFont.truetype(resource_path("arialbd.ttf"), font_size_time)
+        except IOError:
+            font_time = ImageFont.load_default()
+            
+        draw.text((cx, cy), time_str, font=font_time, fill="#555555", anchor="mm")
+
+        # 이미지 리사이즈 (안티앨리어싱) 및 캔버스에 표시
+        image = image.resize((w, h), resample=Image.LANCZOS)
+        self.tk_image = ImageTk.PhotoImage(image)
+        self.canvas.create_image(0, 0, image=self.tk_image, anchor=tk.NW)
 
         # 윈도우 타이틀 업데이트
         if self.is_running:
@@ -208,12 +319,13 @@ class PomodoroApp:
 
     def toggle_timer(self):
         if self.is_running:
-            self.is_running = False
-            self.update_start_button_color()
-            show_toast("일시 정지", "타이머가 일시 정지되었습니다.")
+            # 실행 중이면 중지(초기화)
+            self.reset_timer()
         else:
+            # 정지 상태면 시작
             self.is_running = True
             self.update_start_button_color()
+            self.disable_settings_button()
             
             if self.mode == "work":
                 show_toast("집중 시작", "집중 타이머가 시작되었습니다.")
@@ -240,41 +352,75 @@ class PomodoroApp:
     def finish_cycle(self):
         # 윈도우를 맨 앞으로 가져오기
         self.root.deiconify()
-        play_sound()
+        if self.setting_sound:
+            play_sound()
         
         if self.mode == "work":
             log_pomodoro()
+            self.pomodoro_count += 1
             self.mode = "break"
-            self.current_time = self.break_time
-            show_toast("집중 완료", "집중 시간이 끝났습니다! 휴식 시간이 바로 시작됩니다.")
             
-            # 휴식 시간 자동 시작
-            self.is_running = True
-            self.update_start_button_color()
-            self.last_time = time.time()
-            self.draw_timer()
-            self.root.after(50, self.count_down)
+            # 4번 집중(4의 배수)마다 15분 긴 휴식
+            if self.pomodoro_count > 0 and self.pomodoro_count % self.setting_long_break_interval == 0:
+                self.break_time = self.setting_long_break_min * 60
+                msg = f"{self.setting_long_break_interval}번의 집중({self.pomodoro_count}회) 완료! {self.setting_long_break_min}분간 긴 휴식을 취하세요."
+            else:
+                self.break_time = self.setting_short_break_min * 60
+                msg = "집중 시간이 끝났습니다! 휴식을 취하세요."
+            
+            self.current_time = self.break_time
+            
+            if self.setting_auto_start:
+                show_toast("집중 완료", msg + " (자동 시작)")
+                self.is_running = True
+                self.update_start_button_color()
+                self.last_time = time.time()
+                self.draw_timer()
+                self.root.after(50, self.count_down)
+            else:
+                show_toast("집중 완료", msg)
+                self.is_running = False
+                self.enable_settings_button()
+                self.update_start_button_color()
+                self.draw_timer()
         else:
-            self.is_running = False
-            self.update_start_button_color()
             self.mode = "work"
             self.current_time = self.work_time
-            show_toast("휴식 완료", "휴식 시간이 끝났습니다! 다시 집중해볼까요?")
-            self.draw_timer()
-            messagebox.showinfo("알림", "휴식 시간이 끝났습니다! 다시 집중해볼까요?")
+            
+            if self.setting_auto_start:
+                show_toast("휴식 완료", "휴식 시간이 끝났습니다! 집중 시간이 시작됩니다.")
+                self.is_running = True
+                self.update_start_button_color()
+                self.last_time = time.time()
+                self.draw_timer()
+                self.root.after(50, self.count_down)
+            else:
+                show_toast("휴식 완료", "휴식 시간이 끝났습니다! 다시 집중해볼까요?")
+                self.is_running = False
+                self.enable_settings_button()
+                self.update_start_button_color()
+                self.draw_timer()
 
     def reset_timer(self):
         self.is_running = False
+        self.enable_settings_button()
         self.update_start_button_color()
         self.mode = "work"
+        self.work_time = self.setting_work_min * 60
         self.current_time = self.work_time
         self.draw_timer()
 
     def update_start_button_color(self):
         if self.is_running:
-            self.start_button.config(text="⏸", bg="#FF9AA2", fg="white")
+            self.start_button.config(image=self.icon_stop, bg="#FF9AA2")
         else:
-            self.start_button.config(text="▶", bg="#FFDAC1", fg="#555555")
+            self.start_button.config(image=self.icon_play, bg="#FFDAC1")
+
+    def enable_settings_button(self):
+        self.settings_button.config(state=tk.NORMAL, image=self.icon_settings)
+
+    def disable_settings_button(self):
+        self.settings_button.config(state=tk.DISABLED, image=self.icon_settings_disabled)
 
     def handle_mouse_input(self, event):
         if self.is_running:
@@ -300,6 +446,7 @@ class PomodoroApp:
         minutes = round(angle / 6 / 5) * 5
         if minutes == 0: minutes = 60
         
+        self.setting_work_min = minutes
         self.work_time = minutes * 60
         self.reset_timer()
 
@@ -343,6 +490,65 @@ class PomodoroApp:
             
         if new_x != x or new_y != y:
             self.root.geometry(f"+{new_x}+{new_y}")
+
+    def open_settings(self):
+        sw = tk.Toplevel(self.root)
+        sw.title("설정")
+        sw.geometry("280x420")
+        sw.resizable(False, False)
+        sw.configure(bg="#FFF8F0")
+        sw.transient(self.root)
+        sw.grab_set()
+        
+        # 화면 중앙 배치
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 140
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 160
+        sw.geometry(f"+{x}+{y}")
+
+        lbl_font = ("Helvetica", 10)
+        bg_color = "#FFF8F0"
+        
+        def create_row(label_text, default_val, row):
+            tk.Label(sw, text=label_text, font=lbl_font, bg=bg_color).grid(row=row, column=0, padx=20, pady=10, sticky="w")
+            var = tk.IntVar(value=default_val)
+            spin = tk.Spinbox(sw, from_=1, to=180, textvariable=var, width=5, font=lbl_font)
+            spin.grid(row=row, column=1, padx=20, pady=10)
+            return var
+
+        var_work = create_row("집중 시간 (분)", self.setting_work_min, 0)
+        var_short = create_row("짧은 휴식 (분)", self.setting_short_break_min, 1)
+        var_long = create_row("긴 휴식 (분)", self.setting_long_break_min, 2)
+        var_interval = create_row("긴 휴식 간격 (회)", self.setting_long_break_interval, 3)
+
+        var_top = tk.BooleanVar(value=self.setting_always_on_top)
+        chk_top = tk.Checkbutton(sw, text="항상 위에 표시", variable=var_top, font=lbl_font, bg=bg_color, fg="#555555", activebackground=bg_color, activeforeground="#555555", highlightthickness=0, bd=0)
+        chk_top.grid(row=4, column=0, columnspan=2, padx=20, pady=10, sticky="w")
+
+        var_auto = tk.BooleanVar(value=self.setting_auto_start)
+        chk_auto = tk.Checkbutton(sw, text="타이머 자동 시작", variable=var_auto, font=lbl_font, bg=bg_color, fg="#555555", activebackground=bg_color, activeforeground="#555555", highlightthickness=0, bd=0)
+        chk_auto.grid(row=5, column=0, columnspan=2, padx=20, pady=10, sticky="w")
+
+        var_sound = tk.BooleanVar(value=self.setting_sound)
+        chk_sound = tk.Checkbutton(sw, text="알림음 켜기", variable=var_sound, font=lbl_font, bg=bg_color, fg="#555555", activebackground=bg_color, activeforeground="#555555", highlightthickness=0, bd=0)
+        chk_sound.grid(row=6, column=0, columnspan=2, padx=20, pady=10, sticky="w")
+        
+        def save_settings():
+            self.setting_work_min = int(var_work.get())
+            self.setting_short_break_min = int(var_short.get())
+            self.setting_long_break_min = int(var_long.get())
+            self.setting_long_break_interval = int(var_interval.get())
+            
+            self.setting_always_on_top = var_top.get()
+            self.root.attributes('-topmost', self.setting_always_on_top)
+
+            self.setting_auto_start = var_auto.get()
+            self.setting_sound = var_sound.get()
+
+            self.reset_timer()
+            sw.destroy()
+
+        save_btn = tk.Button(sw, text="저장", font=("Helvetica", 10, "bold"), bg="#FFDAC1", fg="#555555", bd=0, padx=20, pady=5, command=save_settings)
+        save_btn.grid(row=7, column=0, columnspan=2, pady=20)
 
 if __name__ == "__main__":
     root = tk.Tk()

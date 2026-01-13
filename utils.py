@@ -7,7 +7,7 @@ def play_sound():
     try:
         if sys.platform == "win32":
             import winsound
-            winsound.Beep(1000, 1000)  # 1000Hz, 1초
+            winsound.Beep(1000, 1000)  # 1000Hz, 1.5초
         else:
             print('\a')  # Mac/Linux 기본 비프음
     except Exception:

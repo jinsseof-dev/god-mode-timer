@@ -11,6 +11,9 @@ def build():
         '--noconsole',                   # GUI 프로그램이므로 콘솔 창 숨김
         '--clean',                       # 빌드 캐시 삭제
         '--hidden-import=ctypes.wintypes', # Windows API 관련 모듈 명시적 포함
+        '--hidden-import=PIL',             # Pillow 라이브러리 명시적 포함
+        '--hidden-import=PIL.ImageTk',     # ImageTk 모듈 명시적 포함
+        '--add-data=arialbd.ttf;.',        # 폰트 파일 패키징
     ]
     
     PyInstaller.__main__.run(options)
