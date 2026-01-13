@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
-from utils import play_sound, log_pomodoro, show_toast
+from utils import play_sound, log_pomodoro, show_toast, play_tick_sound
 import time
 import math
 import sys
@@ -93,7 +93,7 @@ class WindowsTaskbar:
 class PomodoroApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Focus Timer")
+        self.root.title("Pomodoro Timer")
         self.root.geometry("360x400")
         self.root.resizable(True, True)
         self.root.minsize(300, 350)
@@ -257,7 +257,13 @@ class PomodoroApp:
         try:
             font = ImageFont.truetype(resource_path("arialbd.ttf"), font_size)
         except IOError:
-            font = ImageFont.load_default()
+            try:
+                font = ImageFont.truetype("arialbd.ttf", font_size)
+            except IOError:
+                try:
+                    font = ImageFont.truetype("arial.ttf", font_size)
+                except IOError:
+                    font = ImageFont.load_default()
 
         for i in range(60):
             angle_deg = 90 - (i * 6)
@@ -286,7 +292,7 @@ class PomodoroApp:
 
         # 4. 중앙 디지털 시간 표시
         center_radius = radius * 0.175
-        draw.ellipse((cx-center_radius, cy-center_radius, cx+center_radius, cy+center_radius), fill="#F0F0F0", outline="black", width=int(2*scale))
+        draw.ellipse((cx-center_radius, cy-center_radius, cx+center_radius, cy+center_radius), fill="#F0F0F0")
         
         mins, secs = divmod(int(self.current_time), 60)
         time_str = "{:02d}:{:02d}".format(mins, secs)
@@ -295,26 +301,32 @@ class PomodoroApp:
         try:
             font_time = ImageFont.truetype(resource_path("arialbd.ttf"), font_size_time)
         except IOError:
-            font_time = ImageFont.load_default()
+            try:
+                font_time = ImageFont.truetype("arialbd.ttf", font_size_time)
+            except IOError:
+                try:
+                    font_time = ImageFont.truetype("arial.ttf", font_size_time)
+                except IOError:
+                    font_time = ImageFont.load_default()
             
         draw.text((cx, cy), time_str, font=font_time, fill="#555555", anchor="mm")
 
         # 이미지 리사이즈 (안티앨리어싱) 및 캔버스에 표시
-        image = image.resize((w, h), resample=Image.LANCZOS)
+        image = image.resize((w, h), resample=Image.BILINEAR)
         self.tk_image = ImageTk.PhotoImage(image)
         self.canvas.create_image(0, 0, image=self.tk_image, anchor=tk.NW)
 
         # 윈도우 타이틀 업데이트
         if self.is_running:
-            new_title = f"{time_str} - Focus Timer"
+            new_title = f"{time_str} - Pomodoro Timer"
             if self.root.title() != new_title:
                 self.root.title(new_title)
             
             # 작업 표시줄 진행률 업데이트
             total_time = self.work_time if self.mode == "work" else self.break_time
             self.taskbar.set_progress(self.current_time, total_time)
-        elif self.root.title() != "Focus Timer":
-            self.root.title("Focus Timer")
+        elif self.root.title() != "Pomodoro Timer":
+            self.root.title("Pomodoro Timer")
             self.taskbar.reset()
 
     def toggle_timer(self):
@@ -446,6 +458,9 @@ class PomodoroApp:
         minutes = round(angle / 6 / 5) * 5
         if minutes == 0: minutes = 60
         
+        if self.setting_work_min != minutes and self.setting_sound:
+            play_tick_sound()
+
         self.setting_work_min = minutes
         self.work_time = minutes * 60
         self.reset_timer()

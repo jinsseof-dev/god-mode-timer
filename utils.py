@@ -1,15 +1,40 @@
 import sys
 import subprocess
+import os
 from datetime import datetime
+import time
 
 def play_sound():
     """운영체제에 맞는 알림음을 재생합니다."""
     try:
         if sys.platform == "win32":
             import winsound
-            winsound.Beep(1000, 1000)  # 1000Hz, 1.5초
+            if os.path.exists("alarm.wav"):
+                # SND_FILENAME: 파일 이름, SND_ASYNC: 비동기 재생
+                winsound.PlaySound("alarm.wav", winsound.SND_FILENAME | winsound.SND_ASYNC)
+            else:
+                winsound.Beep(1000, 1500)  # 1000Hz, 1.5초
         else:
             print('\a')  # Mac/Linux 기본 비프음
+    except Exception:
+        pass
+
+_last_tick_time = 0
+
+def play_tick_sound():
+    """마우스 조작 시 짧은 클릭음(조약돌 소리 유사)을 재생합니다."""
+    global _last_tick_time
+    if time.time() - _last_tick_time < 0.05:
+        return
+    _last_tick_time = time.time()
+
+    try:
+        if sys.platform == "win32":
+            import winsound
+            if os.path.exists("tick.wav"):
+                winsound.PlaySound("tick.wav", winsound.SND_FILENAME | winsound.SND_ASYNC)
+            else:
+                winsound.Beep(2000, 10)  # 2000Hz, 0.01초
     except Exception:
         pass
 
