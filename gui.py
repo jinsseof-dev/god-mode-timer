@@ -1,12 +1,16 @@
 import tkinter as tk
 from tkinter import messagebox
 from utils import play_sound, log_pomodoro, show_toast, play_tick_sound
+from taskbar import WindowsTaskbar
+from common import resource_path, get_user_data_path
+from settings_window import open_settings_window
 import time
 import math
 import sys
 import ctypes
 import re
 from PIL import Image, ImageDraw, ImageFont, ImageTk
+import json
 import os
 
 # 윈도우 High DPI 설정 (선명하게 보이기 위함)
@@ -19,77 +23,6 @@ if sys.platform == "win32":
         except Exception:
             pass
 
-def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-
-    return os.path.join(base_path, relative_path)
-
-class WindowsTaskbar:
-    def __init__(self, root):
-        self.root = root
-        self.ptr = None
-        if sys.platform != "win32":
-            return
-        
-        try:
-            from ctypes import wintypes
-            ctypes.windll.ole32.CoInitialize(0)
-            
-            # CLSID_TaskbarList = {56FDF344-FD6D-11d0-958A-006097C9A090}
-            CLSID_TaskbarList = (ctypes.c_ubyte * 16)(0x44, 0xF3, 0xFD, 0x56, 0x6D, 0xFD, 0xD0, 0x11, 0x95, 0x8A, 0x00, 0x60, 0x97, 0xC9, 0xA0, 0x90)
-            # IID_ITaskbarList3 = {ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf}
-            IID_ITaskbarList3 = (ctypes.c_ubyte * 16)(0x91, 0xfb, 0x1a, 0xea, 0x28, 0x9e, 0x86, 0x4b, 0x90, 0xe9, 0x9e, 0x9f, 0x8a, 0x5e, 0xef, 0xaf)
-            
-            self.ptr = ctypes.c_void_p()
-            ret = ctypes.windll.ole32.CoCreateInstance(
-                ctypes.byref(CLSID_TaskbarList), 0, 1, ctypes.byref(IID_ITaskbarList3), ctypes.byref(self.ptr)
-            )
-            
-            if ret == 0 and self.ptr:
-                # VTable 접근
-                self.lpVtbl = ctypes.cast(self.ptr, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p)))
-                # HrInit (Index 3)
-                HrInit = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p)(self.lpVtbl.contents[3])
-                HrInit(self.ptr)
-        except Exception:
-            self.ptr = None
-
-    def set_progress(self, current, total):
-        if not self.ptr or sys.platform != "win32": return
-        try:
-            from ctypes import wintypes
-            hwnd = self.root.winfo_id()
-            parent = ctypes.windll.user32.GetParent(hwnd)
-            if parent: hwnd = parent
-            
-            # SetProgressValue (Index 9)
-            SetProgressValue = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, wintypes.HWND, ctypes.c_ulonglong, ctypes.c_ulonglong)(self.lpVtbl.contents[9])
-            SetProgressValue(self.ptr, hwnd, int(current), int(total))
-            
-            # SetProgressState (Index 10), 2 = Normal (Green)
-            SetProgressState = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, wintypes.HWND, ctypes.c_int)(self.lpVtbl.contents[10])
-            SetProgressState(self.ptr, hwnd, 2)
-        except Exception:
-            pass
-
-    def reset(self):
-        if not self.ptr or sys.platform != "win32": return
-        try:
-            from ctypes import wintypes
-            hwnd = self.root.winfo_id()
-            parent = ctypes.windll.user32.GetParent(hwnd)
-            if parent: hwnd = parent
-            # SetProgressState (Index 10), 0 = NoProgress
-            SetProgressState = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, wintypes.HWND, ctypes.c_int)(self.lpVtbl.contents[10])
-            SetProgressState(self.ptr, hwnd, 0)
-        except Exception:
-            pass
-
 class PomodoroApp:
     def __init__(self, root):
         self.root = root
@@ -98,7 +31,6 @@ class PomodoroApp:
         self.root.resizable(True, True)
         self.root.minsize(300, 350)
         self.root.configure(bg="#FFF8F0")
-        self.root.attributes('-topmost', True)
 
         # 윈도우 작업 표시줄 진행률 초기화
         self.taskbar = WindowsTaskbar(root)
@@ -121,6 +53,10 @@ class PomodoroApp:
         self.setting_short_break_min = 5
         self.setting_long_break_min = 15
         self.setting_long_break_interval = 4
+        
+        # 설정 파일 로드
+        self.load_settings()
+        self.root.attributes('-topmost', self.setting_always_on_top)
         
         self.work_time = self.setting_work_min * 60
         self.break_time = self.setting_short_break_min * 60
@@ -465,8 +401,55 @@ class PomodoroApp:
         self.work_time = minutes * 60
         self.reset_timer()
 
+    def load_settings(self):
+        settings_path = get_user_data_path("settings.json")
+        if not os.path.exists(settings_path):
+            self.save_settings_to_file()
+            return
+
+        try:
+            with open(settings_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                self.setting_always_on_top = data.get("always_on_top", True)
+                self.setting_auto_start = data.get("auto_start", False)
+                self.setting_sound = data.get("sound", True)
+                self.setting_work_min = data.get("work_min", 25)
+                self.setting_short_break_min = data.get("short_break_min", 5)
+                self.setting_long_break_min = data.get("long_break_min", 15)
+                self.setting_long_break_interval = data.get("long_break_interval", 4)
+        except Exception:
+            self.restore_default_settings()
+
+    def restore_default_settings(self):
+        self.setting_always_on_top = True
+        self.setting_auto_start = False
+        self.setting_sound = True
+        self.setting_work_min = 25
+        self.setting_short_break_min = 5
+        self.setting_long_break_min = 15
+        self.setting_long_break_interval = 4
+        self.save_settings_to_file()
+        self.root.attributes('-topmost', self.setting_always_on_top)
+
+    def save_settings_to_file(self):
+        data = {
+            "always_on_top": self.setting_always_on_top,
+            "auto_start": self.setting_auto_start,
+            "sound": self.setting_sound,
+            "work_min": self.setting_work_min,
+            "short_break_min": self.setting_short_break_min,
+            "long_break_min": self.setting_long_break_min,
+            "long_break_interval": self.setting_long_break_interval
+        }
+        try:
+            with open(get_user_data_path("settings.json"), "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception:
+            pass
+
     def on_closing(self):
         if messagebox.askokcancel("종료", "정말 종료하시겠습니까?"):
+            self.save_settings_to_file()
             self.root.destroy()
 
     def snap_to_edge(self, event):
@@ -507,63 +490,7 @@ class PomodoroApp:
             self.root.geometry(f"+{new_x}+{new_y}")
 
     def open_settings(self):
-        sw = tk.Toplevel(self.root)
-        sw.title("설정")
-        sw.geometry("280x420")
-        sw.resizable(False, False)
-        sw.configure(bg="#FFF8F0")
-        sw.transient(self.root)
-        sw.grab_set()
-        
-        # 화면 중앙 배치
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 140
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 160
-        sw.geometry(f"+{x}+{y}")
-
-        lbl_font = ("Helvetica", 10)
-        bg_color = "#FFF8F0"
-        
-        def create_row(label_text, default_val, row):
-            tk.Label(sw, text=label_text, font=lbl_font, bg=bg_color).grid(row=row, column=0, padx=20, pady=10, sticky="w")
-            var = tk.IntVar(value=default_val)
-            spin = tk.Spinbox(sw, from_=1, to=180, textvariable=var, width=5, font=lbl_font)
-            spin.grid(row=row, column=1, padx=20, pady=10)
-            return var
-
-        var_work = create_row("집중 시간 (분)", self.setting_work_min, 0)
-        var_short = create_row("짧은 휴식 (분)", self.setting_short_break_min, 1)
-        var_long = create_row("긴 휴식 (분)", self.setting_long_break_min, 2)
-        var_interval = create_row("긴 휴식 간격 (회)", self.setting_long_break_interval, 3)
-
-        var_top = tk.BooleanVar(value=self.setting_always_on_top)
-        chk_top = tk.Checkbutton(sw, text="항상 위에 표시", variable=var_top, font=lbl_font, bg=bg_color, fg="#555555", activebackground=bg_color, activeforeground="#555555", highlightthickness=0, bd=0)
-        chk_top.grid(row=4, column=0, columnspan=2, padx=20, pady=10, sticky="w")
-
-        var_auto = tk.BooleanVar(value=self.setting_auto_start)
-        chk_auto = tk.Checkbutton(sw, text="타이머 자동 시작", variable=var_auto, font=lbl_font, bg=bg_color, fg="#555555", activebackground=bg_color, activeforeground="#555555", highlightthickness=0, bd=0)
-        chk_auto.grid(row=5, column=0, columnspan=2, padx=20, pady=10, sticky="w")
-
-        var_sound = tk.BooleanVar(value=self.setting_sound)
-        chk_sound = tk.Checkbutton(sw, text="알림음 켜기", variable=var_sound, font=lbl_font, bg=bg_color, fg="#555555", activebackground=bg_color, activeforeground="#555555", highlightthickness=0, bd=0)
-        chk_sound.grid(row=6, column=0, columnspan=2, padx=20, pady=10, sticky="w")
-        
-        def save_settings():
-            self.setting_work_min = int(var_work.get())
-            self.setting_short_break_min = int(var_short.get())
-            self.setting_long_break_min = int(var_long.get())
-            self.setting_long_break_interval = int(var_interval.get())
-            
-            self.setting_always_on_top = var_top.get()
-            self.root.attributes('-topmost', self.setting_always_on_top)
-
-            self.setting_auto_start = var_auto.get()
-            self.setting_sound = var_sound.get()
-
-            self.reset_timer()
-            sw.destroy()
-
-        save_btn = tk.Button(sw, text="저장", font=("Helvetica", 10, "bold"), bg="#FFDAC1", fg="#555555", bd=0, padx=20, pady=5, command=save_settings)
-        save_btn.grid(row=7, column=0, columnspan=2, pady=20)
+        open_settings_window(self)
 
 if __name__ == "__main__":
     root = tk.Tk()

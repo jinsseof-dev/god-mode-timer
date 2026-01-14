@@ -3,6 +3,7 @@ import subprocess
 import os
 from datetime import datetime
 import time
+from common import get_user_data_path
 
 def play_sound():
     """운영체제에 맞는 알림음을 재생합니다."""
@@ -41,10 +42,11 @@ def play_tick_sound():
 def log_pomodoro():
     """완료된 뽀모도로를 로그 파일에 기록합니다."""
     try:
-        with open("pomodoro_log.txt", "a", encoding="utf-8") as f:
+        log_path = get_user_data_path("pomodoro_log.txt")
+        with open(log_path, "a", encoding="utf-8") as f:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"[{now}] 🍅 뽀모도로 집중 완료\n")
-        print("💾 기록이 'pomodoro_log.txt'에 저장되었습니다.")
+        print(f"💾 기록이 '{log_path}'에 저장되었습니다.")
     except Exception as e:
         print(f"\n로그 저장 실패: {e}")
 
