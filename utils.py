@@ -2,20 +2,23 @@ import sys
 import os
 from datetime import datetime
 import time
-from common import get_user_data_path, resource_path
+from common import get_user_data_path
 import json
+import threading
 
 def play_sound():
-    """운영체제에 맞는 알림음을 재생합니다."""
+    """운영체제에 맞는 알림음을 재생합니다 (시스템 비프음 사용)."""
     try:
         if sys.platform == "win32":
             import winsound
-            sound_path = resource_path("alarm.wav")
-            if os.path.exists(sound_path):
-                # SND_FILENAME: 파일 이름, SND_ASYNC: 비동기 재생
-                winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-            else:
-                winsound.Beep(1000, 1500)  # 1000Hz, 1.5초
+            # UI 프리징 방지를 위해 별도 스레드에서 재생
+            def _beep():
+                # '딩-동' 느낌의 비프음 패턴
+                winsound.Beep(880, 400)  # A5
+                time.sleep(0.05)
+                winsound.Beep(698, 600)  # F5
+            
+            threading.Thread(target=_beep, daemon=True).start()
         else:
             print('\a')  # Mac/Linux 기본 비프음
     except Exception:
@@ -33,11 +36,8 @@ def play_tick_sound():
     try:
         if sys.platform == "win32":
             import winsound
-            sound_path = resource_path("tick.wav")
-            if os.path.exists(sound_path):
-                winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-            else:
-                winsound.Beep(2000, 10)  # 2000Hz, 0.01초
+            # 아주 짧은 고음 비프음 (블로킹이어도 5ms라 체감 없음)
+            winsound.Beep(1200, 5)
     except Exception:
         pass
 

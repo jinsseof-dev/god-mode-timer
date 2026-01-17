@@ -1,41 +1,11 @@
 import PyInstaller.__main__
 import sys
 import os
-import wave
-import math
-import struct
 import shutil
-
-def create_dummy_wav(filename, duration=0.5, freq=440):
-    """간단한 비프음 WAV 파일을 생성합니다."""
-    if os.path.exists(filename): return
-    
-    print(f"🔊 리소스 생성: {filename}")
-    sample_rate = 44100
-    n_samples = int(sample_rate * duration)
-    
-    try:
-        with wave.open(filename, 'w') as f:
-            f.setnchannels(1)
-            f.setsampwidth(2)
-            f.setframerate(sample_rate)
-            
-            data = []
-            for i in range(n_samples):
-                t = float(i) / sample_rate
-                value = int(32767.0 * 0.5 * math.sin(2.0 * math.pi * freq * t))
-                data.append(struct.pack('<h', value))
-            f.writeframes(b''.join(data))
-    except Exception as e:
-        print(f"⚠️ WAV 생성 실패: {e}")
 
 def ensure_resources():
     """빌드에 필요한 리소스가 없으면 생성하거나 시스템에서 복사합니다."""
-    # 1. 알림음 생성 (없을 경우)
-    create_dummy_wav("alarm.wav", duration=1.0, freq=880) # A5
-    create_dummy_wav("tick.wav", duration=0.05, freq=2000) # High pitch tick
-    
-    # 2. 폰트 복사 (Windows 환경인 경우)
+    # 1. 폰트 복사 (Windows 환경인 경우)
     font_file = "arialbd.ttf"
     if not os.path.exists(font_file) and sys.platform == "win32":
         sys_font = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", font_file)
@@ -81,6 +51,20 @@ def generate_manifest():
         f.write(content)
     print(f"✅ Manifest 생성 완료: {output_path}")
 
+def create_app_manifest():
+    """High DPI 설정을 포함한 실행 파일용 매니페스트를 생성합니다."""
+    manifest_content = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/PM</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>"""
+    with open("app.manifest", "w", encoding="utf-8") as f:
+        f.write(manifest_content)
+
 def build():
     print(" 배포용 실행 파일 빌드를 시작합니다...")
     
@@ -89,6 +73,9 @@ def build():
     
     # 매니페스트 생성
     generate_manifest()
+    
+    # 실행 파일용 매니페스트 생성 (High DPI)
+    create_app_manifest()
     
     options = [
         'gui.py',                        # 메인 소스 파일
@@ -102,10 +89,12 @@ def build():
         '--hidden-import=winrt.windows.ui.notifications', # WinRT 알림 모듈
         '--hidden-import=winrt.windows.data.xml.dom',     # WinRT XML 모듈
         '--hidden-import=pystray',         # 시스템 트레이 모듈
+        '--hidden-import=winrt.windows.storage', # WinRT 스토리지 모듈
+        '--manifest=app.manifest',         # High DPI 매니페스트 포함
     ]
     
     # 리소스 파일이 존재하는 경우에만 포함 (파일이 없어도 빌드가 되도록 처리)
-    resources = ['alarm.wav', 'tick.wav', 'arialbd.ttf']
+    resources = ['arialbd.ttf']
     for res in resources:
         if os.path.exists(res):
             options.append(f'--add-data={res};.')

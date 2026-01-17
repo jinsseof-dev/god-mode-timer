@@ -8,7 +8,6 @@ from stats_window import open_stats_window
 import time
 import math
 import sys
-import ctypes
 import re
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 import json
@@ -16,16 +15,6 @@ import os
 import pystray
 from pystray import MenuItem as item
 import threading
-
-# 윈도우 High DPI 설정 (선명하게 보이기 위함)
-if sys.platform == "win32":
-    try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
-    except Exception:
-        try:
-            ctypes.windll.user32.SetProcessDPIAware()
-        except Exception:
-            pass
 
 class GodModeApp:
     def __init__(self, root):

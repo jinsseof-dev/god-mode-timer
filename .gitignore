@@ -26,3 +26,7 @@ godmode_log.txt
 store_package/GodModTimer.exe
 .env
 store_package/AppxManifest.xml
+app.manifest
+
+# Generated Resources (build.py)
+arialbd.ttf
