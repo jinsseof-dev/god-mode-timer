@@ -44,6 +44,9 @@ def open_settings_window(app):
     chk_sound = tk.Checkbutton(sw, text="알림음 켜기", variable=var_sound, font=lbl_font, bg=bg_color, fg=fg_color, activebackground=bg_color, activeforeground=fg_color, selectcolor=bg_color, highlightthickness=0, bd=0)
     chk_sound.grid(row=6, column=0, columnspan=2, padx=20, pady=5, sticky="w")
     
+    var_task_input = tk.BooleanVar(value=app.setting_show_task_input)
+    chk_task_input = tk.Checkbutton(sw, text="할 일 입력창 표시", variable=var_task_input, font=lbl_font, bg=bg_color, fg=fg_color, activebackground=bg_color, activeforeground=fg_color, selectcolor=bg_color, highlightthickness=0, bd=0)
+    chk_task_input.grid(row=7, column=0, columnspan=2, padx=20, pady=5, sticky="w")
     
     def restore_defaults():
         if messagebox.askyesno("기본값 복원", "모든 설정을 기본값으로 되돌리시겠습니까?", parent=sw):
@@ -54,6 +57,7 @@ def open_settings_window(app):
             var_top.set(True)
             var_auto.set(False)
             var_sound.set(True)
+            var_task_input.set(False)
 
     def save_settings():
         app.setting_work_min = int(var_work.get())
@@ -66,8 +70,10 @@ def open_settings_window(app):
 
         app.setting_auto_start = var_auto.get()
         app.setting_sound = var_sound.get()
+        app.setting_show_task_input = var_task_input.get()
         
         app.save_settings_to_file()
+        app.update_task_input_visibility()
 
         app.reset_timer()
         sw.destroy()

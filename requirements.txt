@@ -2,3 +2,4 @@ Pillow
 pyinstaller
 winrt-windows-ui-notifications
 winrt-windows-data-xml-dom
+pystray

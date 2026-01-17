@@ -40,13 +40,16 @@ def play_tick_sound():
     except Exception:
         pass
 
-def log_godmode():
+def log_godmode(task_name=None):
     """완료된 갓생(집중)을 로그 파일에 기록합니다."""
     try:
         log_path = get_user_data_path("godmode_log.txt")
         with open(log_path, "a", encoding="utf-8") as f:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            f.write(f"[{now}] ⚡ 갓생 집중 완료\n")
+            if task_name:
+                f.write(f"[{now}] ⚡ 갓생 집중 완료 - {task_name}\n")
+            else:
+                f.write(f"[{now}] ⚡ 갓생 집중 완료\n")
         print(f"💾 기록이 '{log_path}'에 저장되었습니다.")
     except Exception as e:
         print(f"\n로그 저장 실패: {e}")

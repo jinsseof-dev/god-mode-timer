@@ -13,6 +13,9 @@ import re
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 import json
 import os
+import pystray
+from pystray import MenuItem as item
+import threading
 
 # 윈도우 High DPI 설정 (선명하게 보이기 위함)
 if sys.platform == "win32":
@@ -39,8 +42,14 @@ class GodModeApp:
         # 윈도우 아이콘 설정
         self.set_window_icon()
 
+        # 시스템 트레이 아이콘 설정
+        self.init_tray_icon()
+
         # 윈도우 닫기 이벤트 처리
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+        # 최소화 이벤트 처리 (트레이로 숨기기)
+        self.root.bind("<Unmap>", self.minimize_to_tray)
 
         # 윈도우 자석 효과 (Snap to Edge)
         self.root.bind("<Configure>", self.snap_to_edge)
@@ -54,6 +63,7 @@ class GodModeApp:
         self.setting_short_break_min = 5
         self.setting_long_break_min = 15
         self.setting_long_break_interval = 4
+        self.setting_show_task_input = False
         
         # 설정 파일 로드
         self.load_settings()
@@ -91,15 +101,15 @@ class GodModeApp:
         self.start_button.bind("<Enter>", lambda e: self.start_button.config(bg=self.colors["start_btn_hover"]))
         self.start_button.bind("<Leave>", lambda e: self.update_start_button_color())
 
-        self.settings_button = tk.Button(self.btn_frame, text="⚙", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.open_settings)
-        self.settings_button.pack(side=tk.LEFT, padx=10)
-        self.settings_button.bind("<Enter>", lambda e: self.settings_button.config(bg=self.colors["btn_hover"]) if self.settings_button['state'] != tk.DISABLED else None)
-        self.settings_button.bind("<Leave>", lambda e: self.settings_button.config(bg=self.colors["btn_bg"]) if self.settings_button['state'] != tk.DISABLED else None)
-
         self.stats_button = tk.Button(self.btn_frame, text="📊", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.open_stats)
         self.stats_button.pack(side=tk.LEFT, padx=10)
         self.stats_button.bind("<Enter>", lambda e: self.stats_button.config(bg=self.colors["btn_hover"]))
         self.stats_button.bind("<Leave>", lambda e: self.stats_button.config(bg=self.colors["btn_bg"]))
+
+        self.settings_button = tk.Button(self.btn_frame, text="⚙", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.open_settings)
+        self.settings_button.pack(side=tk.LEFT, padx=10)
+        self.settings_button.bind("<Enter>", lambda e: self.settings_button.config(bg=self.colors["btn_hover"]) if self.settings_button['state'] != tk.DISABLED else None)
+        self.settings_button.bind("<Leave>", lambda e: self.settings_button.config(bg=self.colors["btn_bg"]) if self.settings_button['state'] != tk.DISABLED else None)
 
         # 아이콘 이미지 생성
         self.icon_play = self.create_button_icon("play", self.colors["icon_color"])
@@ -113,7 +123,24 @@ class GodModeApp:
         self.settings_button.config(image=self.icon_settings, text="", width=50, height=40)
         self.stats_button.config(image=self.icon_stats, text="", width=50, height=40)
 
+        # 할 일 입력 프레임 (Task Input)
+        self.task_frame = tk.Frame(root, bg=self.colors["bg"])
+        
+        self.task_var = tk.StringVar()
+        self.task_placeholder = "지금 할 일 입력..."
+        
+        self.task_entry = tk.Entry(self.task_frame, textvariable=self.task_var, font=("Helvetica", 10), bg=self.colors["btn_bg"], fg=self.colors["fg_sub"], bd=0, justify="center")
+        self.task_entry.pack(fill=tk.X, ipady=6)
+        self.task_entry.insert(0, self.task_placeholder)
+        
+        self.task_entry.bind("<FocusIn>", self.on_task_focus_in)
+        self.task_entry.bind("<FocusOut>", self.on_task_focus_out)
+        self.task_entry.bind("<Return>", self.on_task_return)
+
         self.tk_image = None
+        
+        # 설정에 따라 할 일 입력창 표시 여부 결정
+        self.update_task_input_visibility()
 
     def set_window_icon(self):
         # 윈도우 아이콘 동적 생성 (황금 번개 - 갓생 모드)
@@ -130,6 +157,53 @@ class GodModeApp:
         
         self.tk_icon = ImageTk.PhotoImage(image)
         self.root.iconphoto(True, self.tk_icon)
+
+    def init_tray_icon(self):
+        # 트레이 아이콘용 이미지 생성
+        image = self.create_tray_image()
+        
+        # 메뉴 정의
+        menu = (
+            item('열기', self.show_window_from_tray, default=True),
+            item('종료', self.quit_app_from_tray)
+        )
+        
+        self.tray_icon = pystray.Icon("GodModeTimer", image, "God-Mode Timer", menu)
+        
+        # 별도 스레드에서 실행 (Tkinter 메인루프와 충돌 방지)
+        threading.Thread(target=self.tray_icon.run, daemon=True).start()
+
+    def create_tray_image(self):
+        # 64x64 아이콘 생성 (set_window_icon 로직 재사용)
+        size = 64
+        image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        
+        # 배경 원 (다크 그레이)
+        draw.ellipse((2, 2, 62, 62), fill="#333333", outline="#555555")
+        
+        # Lightning Bolt Points (Zigzag shape)
+        points = [(36, 4), (20, 34), (32, 34), (16, 60), (48, 26), (36, 26)]
+        draw.polygon(points, fill="#FFD700", outline="#B8860B", width=2)
+        
+        return image
+
+    def show_window_from_tray(self, icon=None, item=None):
+        self.root.after(0, self._show_window_safe)
+
+    def _show_window_safe(self):
+        self.root.deiconify()
+        self.root.attributes('-topmost', self.setting_always_on_top)
+        self.root.lift()
+        self.root.focus_force()
+
+    def quit_app_from_tray(self, icon=None, item=None):
+        self.tray_icon.stop()
+        self.root.after(0, self._quit_app_safe)
+
+    def _quit_app_safe(self):
+        self.save_settings_to_file()
+        self.root.destroy()
 
     def create_button_icon(self, shape, color, size=(24, 24)):
         # 고품질 렌더링을 위한 슈퍼샘플링
@@ -299,6 +373,7 @@ class GodModeApp:
             self.is_running = True
             self.update_start_button_color()
             self.disable_settings_button()
+            self.disable_task_entry()
             
             if self.mode == "work":
                 show_toast("집중 시작", "집중 타이머가 시작되었습니다.")
@@ -329,7 +404,15 @@ class GodModeApp:
             play_sound()
         
         if self.mode == "work":
-            log_godmode()
+            task_content = self.task_var.get()
+            if task_content == self.task_placeholder:
+                task_content = None
+            log_godmode(task_content)
+            
+            # 로그 저장 후 입력창 초기화 (다음 작업을 위해)
+            self.task_var.set("")
+            self.on_task_focus_out(None) # 플레이스홀더 복구
+            
             self.godmode_count += 1
             self.mode = "break"
             
@@ -354,6 +437,7 @@ class GodModeApp:
                 show_toast("집중 완료", msg)
                 self.is_running = False
                 self.enable_settings_button()
+                self.enable_task_entry()
                 self.update_start_button_color()
                 self.draw_timer()
         else:
@@ -371,12 +455,14 @@ class GodModeApp:
                 show_toast("휴식 완료", "휴식 시간이 끝났습니다! 다시 집중해볼까요?")
                 self.is_running = False
                 self.enable_settings_button()
+                self.enable_task_entry()
                 self.update_start_button_color()
                 self.draw_timer()
 
     def reset_timer(self):
         self.is_running = False
         self.enable_settings_button()
+        self.enable_task_entry()
         self.update_start_button_color()
         self.mode = "work"
         self.work_time = self.setting_work_min * 60
@@ -394,6 +480,27 @@ class GodModeApp:
 
     def disable_settings_button(self):
         self.settings_button.config(state=tk.DISABLED, image=self.icon_settings_disabled)
+
+    def enable_task_entry(self):
+        self.task_entry.config(state=tk.NORMAL)
+
+    def disable_task_entry(self):
+        self.task_entry.config(state=tk.DISABLED)
+
+    def on_task_focus_in(self, event):
+        if self.task_var.get() == self.task_placeholder:
+            self.task_entry.delete(0, tk.END)
+            self.task_entry.config(fg=self.colors["fg"])
+
+    def on_task_focus_out(self, event):
+        if not self.task_var.get():
+            self.task_entry.insert(0, self.task_placeholder)
+            self.task_entry.config(fg=self.colors["fg_sub"])
+
+    def on_task_return(self, event):
+        if not self.is_running:
+            self.root.focus_set()
+            self.toggle_timer()
 
     def handle_mouse_input(self, event):
         if self.is_running:
@@ -442,6 +549,7 @@ class GodModeApp:
                 self.setting_short_break_min = data.get("short_break_min", 5)
                 self.setting_long_break_min = data.get("long_break_min", 15)
                 self.setting_long_break_interval = data.get("long_break_interval", 4)
+                self.setting_show_task_input = data.get("show_task_input", False)
         except Exception:
             self.restore_default_settings()
 
@@ -453,10 +561,12 @@ class GodModeApp:
         self.setting_short_break_min = 5
         self.setting_long_break_min = 15
         self.setting_long_break_interval = 4
+        self.setting_show_task_input = False
         self.save_settings_to_file()
         self.root.attributes('-topmost', self.setting_always_on_top)
         self.update_theme_colors()
         self.apply_theme()
+        self.update_task_input_visibility()
 
     def save_settings_to_file(self):
         data = {
@@ -466,7 +576,8 @@ class GodModeApp:
             "work_min": self.setting_work_min,
             "short_break_min": self.setting_short_break_min,
             "long_break_min": self.setting_long_break_min,
-            "long_break_interval": self.setting_long_break_interval
+            "long_break_interval": self.setting_long_break_interval,
+            "show_task_input": self.setting_show_task_input
         }
         try:
             with open(get_user_data_path("settings.json"), "w", encoding="utf-8") as f:
@@ -475,9 +586,40 @@ class GodModeApp:
             pass
 
     def on_closing(self):
-        if messagebox.askokcancel("종료", "정말 종료하시겠습니까?"):
+        self.show_exit_popup()
+
+    def show_exit_popup(self):
+        popup = tk.Toplevel(self.root)
+        popup.title("종료")
+        popup.geometry("280x140")
+        popup.resizable(False, False)
+        popup.configure(bg=self.colors["bg"])
+        popup.transient(self.root)
+        popup.grab_set()
+        
+        # 화면 중앙 배치
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 140
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 70
+        popup.geometry(f"+{x}+{y}")
+
+        tk.Label(popup, text="정말 종료하시겠습니까?", font=("Helvetica", 11), bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=(30, 20))
+
+        btn_frame = tk.Frame(popup, bg=self.colors["bg"])
+        btn_frame.pack(pady=5)
+
+        def do_exit():
+            popup.destroy()
             self.save_settings_to_file()
+            self.tray_icon.stop()
             self.root.destroy()
+
+        tk.Button(btn_frame, text="종료", font=("Helvetica", 10, "bold"), bg=self.colors["stop_btn_bg"], fg="white", bd=0, padx=15, pady=5, command=do_exit).pack(side=tk.LEFT, padx=10)
+        tk.Button(btn_frame, text="취소", font=("Helvetica", 10), bg="#E0E0E0", fg="#555555", bd=0, padx=15, pady=5, command=popup.destroy).pack(side=tk.LEFT, padx=10)
+
+    def minimize_to_tray(self, event):
+        if event.widget == self.root and self.root.state() == 'iconic':
+            self.root.withdraw()
+            show_toast("백그라운드 실행", "앱이 시스템 트레이로 최소화되었습니다.")
 
     def snap_to_edge(self, event):
         if event.widget != self.root:
@@ -522,6 +664,12 @@ class GodModeApp:
     def open_stats(self):
         open_stats_window(self)
 
+    def update_task_input_visibility(self):
+        if self.setting_show_task_input:
+            self.task_frame.pack(pady=(0, 15), fill=tk.X, padx=30)
+        else:
+            self.task_frame.pack_forget()
+
     def update_theme_colors(self):
         self.colors = {
             "bg": "#FFF8F0",
@@ -551,6 +699,14 @@ class GodModeApp:
         self.start_button.configure(fg=self.colors["btn_fg"])
         self.settings_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         self.stats_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
+        
+        if hasattr(self, 'task_frame'):
+            self.task_frame.configure(bg=self.colors["bg"])
+            self.task_entry.configure(bg=self.colors["btn_bg"])
+            if self.task_var.get() == self.task_placeholder:
+                self.task_entry.configure(fg=self.colors["fg_sub"])
+            else:
+                self.task_entry.configure(fg=self.colors["fg"])
         
         self.icon_play = self.create_button_icon("play", self.colors["icon_color"])
         self.icon_settings = self.create_button_icon("settings", self.colors["icon_color"])

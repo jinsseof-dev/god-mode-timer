@@ -63,6 +63,7 @@ def build():
         '--hidden-import=PIL.ImageTk',     # ImageTk 모듈 명시적 포함
         '--hidden-import=winrt.windows.ui.notifications', # WinRT 알림 모듈
         '--hidden-import=winrt.windows.data.xml.dom',     # WinRT XML 모듈
+        '--hidden-import=pystray',         # 시스템 트레이 모듈
     ]
     
     # 리소스 파일이 존재하는 경우에만 포함 (파일이 없어도 빌드가 되도록 처리)
