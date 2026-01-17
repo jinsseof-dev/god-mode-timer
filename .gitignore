@@ -1,7 +1,28 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+
+# Virtual Environment
+venv/
+env/
+
+# PyInstaller Build Artifacts
 build/
 dist/
 *.spec
-god-mode_log.txt
+
+# IDE Settings
 .vscode/
+.idea/
+
+# Local Settings & Logs
+settings.json
+godmode_log.txt
+*.log
+
+# Windows Store & Packaging
+*.msix
+*.pfx
+store_package/GodModTimer.exe
+.env
+store_package/AppxManifest.xml

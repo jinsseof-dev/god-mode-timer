@@ -80,6 +80,12 @@ python gui.py
 
 실제 서비스 배포를 위해 빌드 스크립트를 제공합니다. 아래 과정을 통해 최적화된 실행 파일(.exe)을 생성할 수 있습니다.
 
+### 사전 준비 (.env 설정)
+스토어 배포를 위해 프로젝트 루트에 `.env` 파일을 생성하고 게시자 ID를 입력해야 합니다.
+```ini
+PUBLISHER_ID=CN=YOUR-PUBLISHER-ID
+```
+
 ```bash
 # 1. 의존성 설치
 python -m pip install -r requirements.txt

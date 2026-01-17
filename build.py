@@ -46,11 +46,49 @@ def ensure_resources():
             except Exception as e:
                 print(f"⚠️ 폰트 복사 실패: {e}")
 
+def generate_manifest():
+    """템플릿과 .env 파일을 사용하여 AppxManifest.xml을 생성합니다."""
+    template_path = os.path.join("store_package", "AppxManifest.template.xml")
+    output_path = os.path.join("store_package", "AppxManifest.xml")
+    env_path = ".env"
+    
+    if not os.path.exists(template_path):
+        print("⚠️ 템플릿 파일(AppxManifest.template.xml)이 없습니다.")
+        return
+
+    # .env 로드
+    env = {}
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"): continue
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    env[key] = value
+    else:
+        print(f"⚠️ 경고: '{env_path}' 파일이 없습니다. 매니페스트 생성 시 환경 변수가 적용되지 않습니다.")
+    
+    # 템플릿 읽기 및 치환
+    with open(template_path, "r", encoding="utf-8") as f:
+        content = f.read()
+        
+    # 환경변수 치환
+    for key, value in env.items():
+        content = content.replace(f"${{{key}}}", value)
+        
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    print(f"✅ Manifest 생성 완료: {output_path}")
+
 def build():
     print(" 배포용 실행 파일 빌드를 시작합니다...")
     
     # 리소스 자동 준비
     ensure_resources()
+    
+    # 매니페스트 생성
+    generate_manifest()
     
     options = [
         'gui.py',                        # 메인 소스 파일
