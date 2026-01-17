@@ -1,11 +1,11 @@
-# 🍅 Python Pomodoro Timer
+# 🍅 Python God-Mode Timer
 
 생산성 향상을 위한 심플한 파이썬 뽀모도로 타이머 프로젝트입니다.
 25분 집중, 5분 휴식 사이클을 기본으로 합니다.
 
 ## 📊 개발 진척률 (Progress)
 
-**현재 상태: 프로젝트 리브랜딩 및 완성도 향상 (v1.7)**
+**현재 상태: 스토어 배포 및 심사 진행 중 (v1.8)**
 `[==========] 100%`
 
 ## 📝 개발 할 일 (To-Do List)
@@ -47,10 +47,16 @@
 - [x] 시인성 개선 (진한 색상, 검정 테두리)
 
 ### 7단계: 마무리 및 최적화 (Final Polish)
-- [x] 프로젝트 명칭 변경 (Focus Timer -> Pomodoro Timer)
+- [x] 프로젝트 명칭 변경 (Focus Timer -> God-Mode Timer)
 - [x] 조작 피드백 사운드 추가 (틱 소리)
 - [x] 렌더링 성능 최적화 (Bilinear 적용)
 - [x] 시각적 완성도 향상 (색상 조정, 윤곽선 정리)
+
+### 8단계: 스토어 정책 준수 및 최적화 (Future)
+- [ ] `runFullTrust` 권한 제거 가능성 검토
+    - [ ] **알림(Toast)**: PowerShell(`subprocess`) 의존성 제거 및 `winrt` 라이브러리 도입 검토
+    - [ ] **API 호출**: `ctypes` 사용 최소화 및 매니페스트 기반 설정으로 대체
+    - [ ] **파일 접근**: 표준 입출력 대신 UWP 호환 스토리지 API 사용 검토
 
 ## 🚀 설치 및 실행 방법 (Installation & Usage)
 

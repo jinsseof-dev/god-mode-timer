@@ -1,6 +1,6 @@
 import time
 import sys
-from utils import play_sound, log_pomodoro
+from utils import play_sound, log_godmode
 
 def run_timer(minutes, message):
     seconds = minutes * 60
@@ -30,7 +30,7 @@ def run_timer(minutes, message):
     return True
 
 def main():
-    print("🍅 Python Pomodoro Timer")
+    print("🍅 God-Mode Timer")
 
     while True:
         print("\n집중 시간을 입력하세요. (휴식 시간은 5분으로 고정됩니다)")
@@ -48,16 +48,16 @@ def main():
             continue
         
         play_sound()
-        log_pomodoro()
+        log_godmode()
         print("🔔 딩동! 집중 시간이 끝났습니다. 휴식을 취하세요.")
         
         if not run_timer(break_minutes, "☕ 휴식 시간"):
             continue
         
         play_sound()
-        print("✨ 뽀모도로 사이클이 완료되었습니다!")
+        print("✨ 갓생 사이클이 완료되었습니다!")
         
-        if input("\n새로운 뽀모도로를 시작하시겠습니까? (Enter: 예, n: 아니오): ").strip().lower() == 'n':
+        if input("\n새로운 갓생 사이클을 시작하시겠습니까? (Enter: 예, n: 아니오): ").strip().lower() == 'n':
             break
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ def resource_path(relative_path):
 
 def get_user_data_path(filename):
     """사용자 데이터 폴더(AppData) 내의 파일 경로를 반환합니다."""
-    app_name = "PomodoroTimer"
+    app_name = "GodModeTimer"
     if sys.platform == "win32":
         base_path = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
     else:

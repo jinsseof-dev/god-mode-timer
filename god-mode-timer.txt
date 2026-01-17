@@ -1,4 +1,4 @@
-pomodoro-timer/
+god-mode-timer/
 ├── .gitignore
 ├── README.md
 └── src/

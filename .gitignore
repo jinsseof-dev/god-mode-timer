@@ -3,5 +3,5 @@ __pycache__/
 build/
 dist/
 *.spec
-pomodoro_log.txt
+god-mode_log.txt
 .vscode/

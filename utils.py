@@ -3,16 +3,17 @@ import subprocess
 import os
 from datetime import datetime
 import time
-from common import get_user_data_path
+from common import get_user_data_path, resource_path
 
 def play_sound():
     """운영체제에 맞는 알림음을 재생합니다."""
     try:
         if sys.platform == "win32":
             import winsound
-            if os.path.exists("alarm.wav"):
+            sound_path = resource_path("alarm.wav")
+            if os.path.exists(sound_path):
                 # SND_FILENAME: 파일 이름, SND_ASYNC: 비동기 재생
-                winsound.PlaySound("alarm.wav", winsound.SND_FILENAME | winsound.SND_ASYNC)
+                winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
             else:
                 winsound.Beep(1000, 1500)  # 1000Hz, 1.5초
         else:
@@ -32,20 +33,21 @@ def play_tick_sound():
     try:
         if sys.platform == "win32":
             import winsound
-            if os.path.exists("tick.wav"):
-                winsound.PlaySound("tick.wav", winsound.SND_FILENAME | winsound.SND_ASYNC)
+            sound_path = resource_path("tick.wav")
+            if os.path.exists(sound_path):
+                winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
             else:
                 winsound.Beep(2000, 10)  # 2000Hz, 0.01초
     except Exception:
         pass
 
-def log_pomodoro():
-    """완료된 뽀모도로를 로그 파일에 기록합니다."""
+def log_godmode():
+    """완료된 갓생(집중)을 로그 파일에 기록합니다."""
     try:
-        log_path = get_user_data_path("pomodoro_log.txt")
+        log_path = get_user_data_path("godmode_log.txt")
         with open(log_path, "a", encoding="utf-8") as f:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            f.write(f"[{now}] 🍅 뽀모도로 집중 완료\n")
+            f.write(f"[{now}] ⚡ 갓생 집중 완료\n")
         print(f"💾 기록이 '{log_path}'에 저장되었습니다.")
     except Exception as e:
         print(f"\n로그 저장 실패: {e}")

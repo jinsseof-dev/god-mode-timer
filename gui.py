@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
-from utils import play_sound, log_pomodoro, show_toast, play_tick_sound
+from utils import play_sound, log_godmode, show_toast, play_tick_sound
 from taskbar import WindowsTaskbar
 from common import resource_path, get_user_data_path
 from settings_window import open_settings_window
@@ -23,10 +23,10 @@ if sys.platform == "win32":
         except Exception:
             pass
 
-class PomodoroApp:
+class GodModeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Pomodoro Timer")
+        self.root.title("God-Mode Timer")
         self.root.geometry("360x400")
         self.root.resizable(True, True)
         self.root.minsize(300, 350)
@@ -61,7 +61,7 @@ class PomodoroApp:
         self.work_time = self.setting_work_min * 60
         self.break_time = self.setting_short_break_min * 60
         self.current_time = self.work_time
-        self.pomodoro_count = 0
+        self.godmode_count = 0
         self.mode = "work"  # 'work' or 'break'
 
         # 타이머 표시 (도형)
@@ -103,14 +103,17 @@ class PomodoroApp:
         self.tk_image = None
 
     def set_window_icon(self):
-        # 윈도우 아이콘 동적 생성 (토마토 모양)
+        # 윈도우 아이콘 동적 생성 (황금 번개 - 갓생 모드)
         size = 64
         image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
-        # Body
-        draw.ellipse((4, 8, 60, 60), fill="#FF5252", outline="#D32F2F", width=2)
-        # Leaf
-        draw.polygon([(32, 4), (22, 15), (42, 15)], fill="#4CAF50", outline="#388E3C")
+        
+        # 배경 원 (다크 그레이)
+        draw.ellipse((2, 2, 62, 62), fill="#333333", outline="#555555")
+        
+        # Lightning Bolt Points (Zigzag shape)
+        points = [(36, 4), (20, 34), (32, 34), (16, 60), (48, 26), (36, 26)]
+        draw.polygon(points, fill="#FFD700", outline="#B8860B", width=2)
         
         self.tk_icon = ImageTk.PhotoImage(image)
         self.root.iconphoto(True, self.tk_icon)
@@ -169,7 +172,7 @@ class PomodoroApp:
         
         cx, cy = img_w / 2, img_h / 2
         radius = min(img_w, img_h) / 2 * 0.88
-        arc_radius = radius * 0.7
+        arc_radius = radius * 0.65
         
         # 0. 배경 원
         draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius), fill="#FFFFFF", outline="black", width=int(2*scale))
@@ -206,17 +209,17 @@ class PomodoroApp:
             angle_rad = math.radians(angle_deg)
             
             if i % 5 == 0:
-                tick_len = 10 * scale
+                tick_len = 20 * scale
                 width = 2 * scale
                 
                 # 5분 단위 숫자 표시
-                text_radius = radius - (20 * scale)
+                text_radius = radius - (35 * scale)
                 tx = cx + text_radius * math.cos(angle_rad)
                 ty = cy - text_radius * math.sin(angle_rad)
                 text = str(i if i != 0 else 60)
                 draw.text((tx, ty), text, font=font, fill="black", anchor="mm")
             else:
-                tick_len = 5 * scale
+                tick_len = 10 * scale
                 width = 1 * scale
                 
             x_out = cx + radius * math.cos(angle_rad)
@@ -254,15 +257,15 @@ class PomodoroApp:
 
         # 윈도우 타이틀 업데이트
         if self.is_running:
-            new_title = f"{time_str} - Pomodoro Timer"
+            new_title = f"{time_str} - God-Mode Timer"
             if self.root.title() != new_title:
                 self.root.title(new_title)
             
             # 작업 표시줄 진행률 업데이트
             total_time = self.work_time if self.mode == "work" else self.break_time
             self.taskbar.set_progress(self.current_time, total_time)
-        elif self.root.title() != "Pomodoro Timer":
-            self.root.title("Pomodoro Timer")
+        elif self.root.title() != "God-Mode Timer":
+            self.root.title("God-Mode Timer")
             self.taskbar.reset()
 
     def toggle_timer(self):
@@ -304,14 +307,14 @@ class PomodoroApp:
             play_sound()
         
         if self.mode == "work":
-            log_pomodoro()
-            self.pomodoro_count += 1
+            log_godmode()
+            self.godmode_count += 1
             self.mode = "break"
             
             # 4번 집중(4의 배수)마다 15분 긴 휴식
-            if self.pomodoro_count > 0 and self.pomodoro_count % self.setting_long_break_interval == 0:
+            if self.godmode_count > 0 and self.godmode_count % self.setting_long_break_interval == 0:
                 self.break_time = self.setting_long_break_min * 60
-                msg = f"{self.setting_long_break_interval}번의 집중({self.pomodoro_count}회) 완료! {self.setting_long_break_min}분간 긴 휴식을 취하세요."
+                msg = f"{self.setting_long_break_interval}번의 집중({self.godmode_count}회) 완료! {self.setting_long_break_min}분간 긴 휴식을 취하세요."
             else:
                 self.break_time = self.setting_short_break_min * 60
                 msg = "집중 시간이 끝났습니다! 휴식을 취하세요."
@@ -494,5 +497,5 @@ class PomodoroApp:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = PomodoroApp(root)
+    app = GodModeApp(root)
     root.mainloop()
