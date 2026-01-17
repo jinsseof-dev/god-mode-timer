@@ -31,7 +31,7 @@ class GodModeApp:
     def __init__(self, root):
         self.root = root
         self.root.title("God-Mode Timer")
-        self.root.geometry("360x400")
+        self.root.geometry("300x350")
         self.root.resizable(True, True)
         self.root.minsize(300, 350)
         
@@ -64,6 +64,8 @@ class GodModeApp:
         self.setting_long_break_min = 15
         self.setting_long_break_interval = 4
         self.setting_show_task_input = False
+        self.is_mini_mode = False
+        self.normal_geometry = "300x350"
         
         # 설정 파일 로드
         self.load_settings()
@@ -83,6 +85,7 @@ class GodModeApp:
         # 타이머 표시 (도형)
         self.canvas = tk.Canvas(root, bg=self.colors["bg"], highlightthickness=0)
         self.canvas.pack(pady=0, expand=True, fill=tk.BOTH)
+
         self.draw_timer()
         self.canvas.bind("<Configure>", lambda e: self.draw_timer())
         self.canvas.bind("<Button-1>", self.handle_mouse_input)
@@ -92,9 +95,9 @@ class GodModeApp:
         self.canvas.bind("<Enter>", lambda e: self.root.config(cursor="hand2"))
         self.canvas.bind("<Leave>", lambda e: self.root.config(cursor=""))
 
-        # 버튼 프레임
+        # 보조 버튼 프레임 (통계, 설정, 미니모드) - 하단 배치
         self.btn_frame = tk.Frame(root, bg=self.colors["bg"])
-        self.btn_frame.pack(pady=(0, 5))
+        self.btn_frame.pack(pady=(0, 15))
 
         self.start_button = tk.Button(self.btn_frame, text="▶", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["start_btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.toggle_timer)
         self.start_button.pack(side=tk.LEFT, padx=10)
@@ -111,17 +114,24 @@ class GodModeApp:
         self.settings_button.bind("<Enter>", lambda e: self.settings_button.config(bg=self.colors["btn_hover"]) if self.settings_button['state'] != tk.DISABLED else None)
         self.settings_button.bind("<Leave>", lambda e: self.settings_button.config(bg=self.colors["btn_bg"]) if self.settings_button['state'] != tk.DISABLED else None)
 
+        self.mini_button = tk.Button(self.btn_frame, text="🗖", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.toggle_mini_mode)
+        self.mini_button.pack(side=tk.LEFT, padx=10)
+        self.mini_button.bind("<Enter>", lambda e: self.mini_button.config(bg=self.colors["btn_hover"]))
+        self.mini_button.bind("<Leave>", lambda e: self.mini_button.config(bg=self.colors["btn_bg"]))
+
         # 아이콘 이미지 생성
-        self.icon_play = self.create_button_icon("play", self.colors["icon_color"])
-        self.icon_stop = self.create_button_icon("stop", "white")
+        self.icon_play = self.create_button_icon("play", self.colors["icon_color"], size=(24, 24))
+        self.icon_stop = self.create_button_icon("stop", "#FF5252", size=(24, 24))
         self.icon_settings = self.create_button_icon("settings", self.colors["icon_color"])
         self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
         self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"])
+        self.icon_mini = self.create_button_icon("mini", self.colors["icon_color"])
         
         # 버튼에 이미지 적용 (초기 상태)
         self.start_button.config(image=self.icon_play, text="", width=50, height=40)
         self.settings_button.config(image=self.icon_settings, text="", width=50, height=40)
         self.stats_button.config(image=self.icon_stats, text="", width=50, height=40)
+        self.mini_button.config(image=self.icon_mini, text="", width=50, height=40)
 
         # 할 일 입력 프레임 (Task Input)
         self.task_frame = tk.Frame(root, bg=self.colors["bg"])
@@ -246,6 +256,23 @@ class GodModeApp:
             draw.rectangle([(w*0.425, h*0.4), (w*0.575, h*0.8)], fill=color)
             # Bar 3
             draw.rectangle([(w*0.65, h*0.2), (w*0.8, h*0.8)], fill=color)
+            
+        elif shape == "mini":
+            # 축소 아이콘 (네 모서리 안쪽 표시)
+            m = w * 0.25
+            l = w * 0.2
+            # TL
+            draw.line([(m, m), (m, m+l)], fill=color, width=int(scale*1.5))
+            draw.line([(m, m), (m+l, m)], fill=color, width=int(scale*1.5))
+            # TR
+            draw.line([(w-m, m), (w-m, m+l)], fill=color, width=int(scale*1.5))
+            draw.line([(w-m, m), (w-m-l, m)], fill=color, width=int(scale*1.5))
+            # BL
+            draw.line([(m, h-m), (m, h-m-l)], fill=color, width=int(scale*1.5))
+            draw.line([(m, h-m), (m+l, h-m)], fill=color, width=int(scale*1.5))
+            # BR
+            draw.line([(w-m, h-m), (w-m, h-m-l)], fill=color, width=int(scale*1.5))
+            draw.line([(w-m, h-m), (w-m-l, h-m)], fill=color, width=int(scale*1.5))
 
         image = image.resize(size, resample=Image.LANCZOS)
         return ImageTk.PhotoImage(image)
@@ -288,7 +315,7 @@ class GodModeApp:
             draw.pieslice((cx-arc_radius, cy-arc_radius, cx+arc_radius, cy+arc_radius), start=start_angle, end=end_angle, fill=color, outline=color)
 
         # 2. 눈금 그리기 (0~60분)
-        font_size = max(16, int(radius * 0.07))
+        font_size = max(10, int(radius * 0.1))
         try:
             font = ImageFont.truetype(resource_path("arialbd.ttf"), font_size)
         except IOError:
@@ -326,26 +353,23 @@ class GodModeApp:
             draw.line((x_in, y_in, x_out, y_out), fill=self.colors["timer_outline"], width=int(width))
 
         # 4. 중앙 디지털 시간 표시
-        center_radius = radius * 0.175
+        center_radius = radius * 0.22
         draw.ellipse((cx-center_radius, cy-center_radius, cx+center_radius, cy+center_radius), fill=self.colors["timer_center"])
         
         mins, secs = divmod(int(self.current_time), 60)
         time_str = "{:02d}:{:02d}".format(mins, secs)
         
-        font_size_time = max(20, int(radius * 0.09))
+        font_size_time = max(20, int(radius * 0.16))
         try:
             font_time = ImageFont.truetype(resource_path("arialbd.ttf"), font_size_time)
         except IOError:
             try:
                 font_time = ImageFont.truetype("arialbd.ttf", font_size_time)
             except IOError:
-                try:
-                    font_time = ImageFont.truetype("arial.ttf", font_size_time)
-                except IOError:
-                    font_time = ImageFont.load_default()
+                font_time = ImageFont.load_default()
             
         draw.text((cx, cy), time_str, font=font_time, fill=self.colors["fg"], anchor="mm")
-
+        
         # 이미지 리사이즈 (안티앨리어싱) 및 캔버스에 표시
         image = image.resize((w, h), resample=Image.BILINEAR)
         self.tk_image = ImageTk.PhotoImage(image)
@@ -353,6 +377,8 @@ class GodModeApp:
 
         # 윈도우 타이틀 업데이트
         if self.is_running:
+            mins, secs = divmod(int(self.current_time), 60)
+            time_str = "{:02d}:{:02d}".format(mins, secs)
             new_title = f"{time_str} - God-Mode Timer"
             if self.root.title() != new_title:
                 self.root.title(new_title)
@@ -363,6 +389,76 @@ class GodModeApp:
         elif self.root.title() != "God-Mode Timer":
             self.root.title("God-Mode Timer")
             self.taskbar.reset()
+
+    def toggle_mini_mode(self):
+        if not self.is_mini_mode:
+            # 미니 모드 진입
+            self.is_mini_mode = True
+            self.normal_geometry = self.root.geometry()
+            
+            # UI 숨기기
+            self.btn_frame.pack_forget()
+            self.task_frame.pack_forget()
+            
+            # 윈도우 설정 (타이틀바 제거, 크기 축소)
+            self.root.overrideredirect(True)
+            self.root.minsize(0, 0)
+            self.root.geometry("200x200")
+            self.root.attributes('-topmost', True)
+            
+            # 드래그 이동 및 복귀 이벤트 바인딩
+            self.canvas.unbind("<Button-1>")
+            self.canvas.unbind("<B1-Motion>")
+            
+            self.canvas.bind("<ButtonPress-1>", self.start_move)
+            self.canvas.bind("<ButtonRelease-1>", self.stop_move)
+            self.canvas.bind("<B1-Motion>", self.do_move)
+            self.canvas.bind("<Double-Button-1>", self.exit_mini_mode)
+            
+            show_toast("미니 모드", "더블 클릭하면 원래대로 돌아옵니다.")
+        else:
+            self.exit_mini_mode()
+
+    def exit_mini_mode(self, event=None):
+        if not self.is_mini_mode: return
+        
+        self.is_mini_mode = False
+        
+        # 윈도우 복원
+        self.root.overrideredirect(False)
+        self.root.minsize(300, 350)
+        self.root.geometry(self.normal_geometry)
+        self.root.attributes('-topmost', self.setting_always_on_top)
+        
+        # UI 복원
+        self.update_task_input_visibility()
+        self.btn_frame.pack(pady=(0, 15))
+        
+        # 이벤트 복원
+        self.canvas.unbind("<ButtonPress-1>")
+        self.canvas.unbind("<ButtonRelease-1>")
+        self.canvas.unbind("<B1-Motion>")
+        self.canvas.unbind("<Double-Button-1>")
+        
+        self.canvas.bind("<Button-1>", self.handle_mouse_input)
+        self.canvas.bind("<B1-Motion>", self.handle_mouse_input)
+        
+        self.draw_timer()
+
+    def start_move(self, event):
+        self.x = event.x
+        self.y = event.y
+
+    def stop_move(self, event):
+        self.x = None
+        self.y = None
+
+    def do_move(self, event):
+        deltax = event.x - self.x
+        deltay = event.y - self.y
+        x = self.root.winfo_x() + deltax
+        y = self.root.winfo_y() + deltay
+        self.root.geometry(f"+{x}+{y}")
 
     def toggle_timer(self):
         if self.is_running:
@@ -407,7 +503,7 @@ class GodModeApp:
             task_content = self.task_var.get()
             if task_content == self.task_placeholder:
                 task_content = None
-            log_godmode(task_content)
+            log_godmode(task_content, self.setting_work_min, status="success")
             
             # 로그 저장 후 입력창 초기화 (다음 작업을 위해)
             self.task_var.set("")
@@ -516,7 +612,7 @@ class GodModeApp:
         
         # 중앙 시간 표시 영역(흰색 원) 내부 클릭 시 무시
         radius = min(w, h) / 2 * 0.88
-        center_radius = radius * 0.175
+        center_radius = radius * 0.22
         if math.sqrt(dx*dx + dy*dy) < center_radius:
             return
         
@@ -596,6 +692,7 @@ class GodModeApp:
         popup.configure(bg=self.colors["bg"])
         popup.transient(self.root)
         popup.grab_set()
+        popup.focus_set()
         
         # 화면 중앙 배치
         x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 140
@@ -607,7 +704,7 @@ class GodModeApp:
         btn_frame = tk.Frame(popup, bg=self.colors["bg"])
         btn_frame.pack(pady=5)
 
-        def do_exit():
+        def do_exit(event=None):
             popup.destroy()
             self.save_settings_to_file()
             self.tray_icon.stop()
@@ -615,6 +712,8 @@ class GodModeApp:
 
         tk.Button(btn_frame, text="종료", font=("Helvetica", 10, "bold"), bg=self.colors["stop_btn_bg"], fg="white", bd=0, padx=15, pady=5, command=do_exit).pack(side=tk.LEFT, padx=10)
         tk.Button(btn_frame, text="취소", font=("Helvetica", 10), bg="#E0E0E0", fg="#555555", bd=0, padx=15, pady=5, command=popup.destroy).pack(side=tk.LEFT, padx=10)
+        
+        popup.bind('<Return>', do_exit)
 
     def minimize_to_tray(self, event):
         if event.widget == self.root and self.root.state() == 'iconic':
@@ -666,7 +765,7 @@ class GodModeApp:
 
     def update_task_input_visibility(self):
         if self.setting_show_task_input:
-            self.task_frame.pack(pady=(0, 15), fill=tk.X, padx=30)
+            self.task_frame.pack(pady=(0, 10), fill=tk.X, padx=30)
         else:
             self.task_frame.pack_forget()
 
@@ -699,6 +798,7 @@ class GodModeApp:
         self.start_button.configure(fg=self.colors["btn_fg"])
         self.settings_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         self.stats_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
+        self.mini_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         
         if hasattr(self, 'task_frame'):
             self.task_frame.configure(bg=self.colors["bg"])
@@ -708,13 +808,15 @@ class GodModeApp:
             else:
                 self.task_entry.configure(fg=self.colors["fg"])
         
-        self.icon_play = self.create_button_icon("play", self.colors["icon_color"])
+        self.icon_play = self.create_button_icon("play", self.colors["icon_color"], size=(32, 32))
         self.icon_settings = self.create_button_icon("settings", self.colors["icon_color"])
         self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
         self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"])
+        self.icon_mini = self.create_button_icon("mini", self.colors["icon_color"])
         
         self.settings_button.config(image=self.icon_settings)
         self.stats_button.config(image=self.icon_stats)
+        self.mini_button.config(image=self.icon_mini)
         self.update_start_button_color()
         
         self.draw_timer()

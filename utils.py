@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 import time
 from common import get_user_data_path, resource_path
+import json
 
 def play_sound():
     """운영체제에 맞는 알림음을 재생합니다."""
@@ -40,16 +41,22 @@ def play_tick_sound():
     except Exception:
         pass
 
-def log_godmode(task_name=None):
+def log_godmode(task_name=None, duration=25, status="success"):
     """완료된 갓생(집중)을 로그 파일에 기록합니다."""
     try:
         log_path = get_user_data_path("godmode_log.txt")
         with open(log_path, "a", encoding="utf-8") as f:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            if task_name:
-                f.write(f"[{now}] ⚡ 갓생 집중 완료 - {task_name}\n")
-            else:
-                f.write(f"[{now}] ⚡ 갓생 집중 완료\n")
+            
+            # JSON 형식으로 로그 데이터 구성
+            log_entry = {
+                "timestamp": now,
+                "event": "godmode_complete",
+                "duration": duration,
+                "task": task_name,
+                "status": status
+            }
+            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
         print(f"💾 기록이 '{log_path}'에 저장되었습니다.")
     except Exception as e:
         print(f"\n로그 저장 실패: {e}")

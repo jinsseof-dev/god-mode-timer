@@ -48,7 +48,7 @@ def main():
             continue
         
         play_sound()
-        log_godmode()
+        log_godmode(duration=work_minutes, status="success")
         print("🔔 딩동! 집중 시간이 끝났습니다. 휴식을 취하세요.")
         
         if not run_timer(break_minutes, "☕ 휴식 시간"):

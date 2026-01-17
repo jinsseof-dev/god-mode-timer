@@ -2,29 +2,52 @@ import tkinter as tk
 from datetime import datetime, timedelta
 import os
 from common import get_user_data_path
+import json
 
 def parse_logs():
-    """로그 파일을 읽어 날짜별 집중 횟수를 계산합니다."""
+    """로그 파일을 읽어 날짜별 집중 횟수와 시간을 계산합니다."""
     log_path = get_user_data_path("godmode_log.txt")
     if not os.path.exists(log_path):
         return {}
     
-    daily_counts = {}
+    daily_stats = {}
     try:
         with open(log_path, "r", encoding="utf-8") as f:
             for line in f:
-                # 로그 형식: [2024-01-01 12:00:00] ⚡ 갓생 집중 완료
-                if "]" in line:
-                    date_str = line.split("]")[0].strip("[")
+                line = line.strip()
+                if not line: continue
+                
+                timestamp_str = None
+                duration = 25
+                status = "success"
+                
+                # 1. JSON 파싱 시도
+                try:
+                    entry = json.loads(line)
+                    timestamp_str = entry.get("timestamp")
+                    duration = entry.get("duration", 25)
+                    status = entry.get("status", "success")
+                except json.JSONDecodeError:
+                    # 2. 기존 텍스트 형식 파싱 (하위 호환성)
+                    if "]" in line:
+                        timestamp_str = line.split("]")[0].strip("[")
+                
+                if timestamp_str:
                     try:
-                        dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                        dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
                         date_key = dt.strftime("%Y-%m-%d")
-                        daily_counts[date_key] = daily_counts.get(date_key, 0) + 1
+                        
+                        if date_key not in daily_stats:
+                            daily_stats[date_key] = {'count': 0, 'duration': 0}
+                        
+                        if status == "success":
+                            daily_stats[date_key]['count'] += 1
+                            daily_stats[date_key]['duration'] += int(duration)
                     except ValueError:
                         continue
     except Exception:
         pass
-    return daily_counts
+    return daily_stats
 
 def open_stats_window(app):
     """통계 창을 엽니다."""
@@ -40,13 +63,14 @@ def open_stats_window(app):
     y = app.root.winfo_y() + (app.root.winfo_height() // 2) - 200
     sw.geometry(f"+{x}+{y}")
 
-    daily_counts = parse_logs()
+    daily_stats = parse_logs()
     today_str = datetime.now().strftime("%Y-%m-%d")
-    today_count = daily_counts.get(today_str, 0)
+    today_stats = daily_stats.get(today_str, {'count': 0})
+    today_count = today_stats['count']
     
     # 헤더 (오늘의 기록)
     tk.Label(sw, text="오늘의 갓생 지수", font=("Helvetica", 12), bg=app.colors["bg"], fg=app.colors["fg_sub"]).pack(pady=(25, 5))
-    tk.Label(sw, text=f"{today_count}갓생", font=("Helvetica", 36, "bold"), bg=app.colors["bg"], fg=app.colors["stats_bar_today"]).pack(pady=(0, 20))
+    tk.Label(sw, text=f"{today_count}갓생", font=("Helvetica", 36, "bold"), bg=app.colors["bg"], fg=app.colors["stats_bar_today"]).pack(pady=(0, 5))
 
     # 차트 캔버스
     canvas_height = 180
@@ -62,7 +86,8 @@ def open_stats_window(app):
         d = datetime.now() - timedelta(days=i)
         d_str = d.strftime("%Y-%m-%d")
         dates.append(d.strftime("%m/%d"))
-        c = daily_counts.get(d_str, 0)
+        stats = daily_stats.get(d_str, {'count': 0})
+        c = stats['count']
         counts.append(c)
         if c > max_count: max_count = c
     
@@ -88,22 +113,24 @@ def open_stats_window(app):
     # 주간 통계 계산 (ISO 달력 기준 이번 주)
     current_iso = datetime.now().isocalendar()[:2] # (Year, Week)
     weekly_count = 0
+    weekly_duration = 0
     
-    for date_str, count in daily_counts.items():
+    for date_str, stats in daily_stats.items():
         try:
             dt = datetime.strptime(date_str, "%Y-%m-%d")
             if dt.isocalendar()[:2] == current_iso:
-                weekly_count += count
+                weekly_count += stats['count']
+                weekly_duration += stats['duration']
         except ValueError:
             continue
             
-    # 시간 환산 (1회 = 25분 가정)
-    total_minutes = weekly_count * 25
+    # 시간 환산 (실제 duration 사용)
+    total_minutes = weekly_duration
     hours, minutes = divmod(total_minutes, 60)
     time_str = f"{hours}시간 {minutes}분" if hours > 0 else f"{minutes}분"
 
     # 푸터 (주간 시간 및 누적 기록)
-    total_count = sum(daily_counts.values())
+    total_count = sum(s['count'] for s in daily_stats.values())
     
     footer_frame = tk.Frame(sw, bg=app.colors["bg"])
     footer_frame.pack(side=tk.BOTTOM, pady=20)
