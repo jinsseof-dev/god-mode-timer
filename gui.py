@@ -4,6 +4,7 @@ from utils import play_sound, log_godmode, show_toast, play_tick_sound
 from taskbar import WindowsTaskbar
 from common import resource_path, get_user_data_path
 from settings_window import open_settings_window
+from stats_window import open_stats_window
 import time
 import math
 import sys
@@ -30,7 +31,7 @@ class GodModeApp:
         self.root.geometry("360x400")
         self.root.resizable(True, True)
         self.root.minsize(300, 350)
-        self.root.configure(bg="#FFF8F0")
+        
 
         # 윈도우 작업 표시줄 진행률 초기화
         self.taskbar = WindowsTaskbar(root)
@@ -56,7 +57,12 @@ class GodModeApp:
         
         # 설정 파일 로드
         self.load_settings()
+        
+        # 테마 색상 정의 및 적용
+        self.update_theme_colors()
+        
         self.root.attributes('-topmost', self.setting_always_on_top)
+        self.root.configure(bg=self.colors["bg"])
         
         self.work_time = self.setting_work_min * 60
         self.break_time = self.setting_short_break_min * 60
@@ -65,7 +71,7 @@ class GodModeApp:
         self.mode = "work"  # 'work' or 'break'
 
         # 타이머 표시 (도형)
-        self.canvas = tk.Canvas(root, bg="#FFF8F0", highlightthickness=0)
+        self.canvas = tk.Canvas(root, bg=self.colors["bg"], highlightthickness=0)
         self.canvas.pack(pady=0, expand=True, fill=tk.BOTH)
         self.draw_timer()
         self.canvas.bind("<Configure>", lambda e: self.draw_timer())
@@ -77,28 +83,35 @@ class GodModeApp:
         self.canvas.bind("<Leave>", lambda e: self.root.config(cursor=""))
 
         # 버튼 프레임
-        self.btn_frame = tk.Frame(root, bg="#FFF8F0")
+        self.btn_frame = tk.Frame(root, bg=self.colors["bg"])
         self.btn_frame.pack(pady=(0, 5))
 
-        self.start_button = tk.Button(self.btn_frame, text="▶", font=("Helvetica", 16), width=4, bd=0, bg="#FFDAC1", fg="#555555", pady=3, command=self.toggle_timer)
+        self.start_button = tk.Button(self.btn_frame, text="▶", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["start_btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.toggle_timer)
         self.start_button.pack(side=tk.LEFT, padx=10)
-        self.start_button.bind("<Enter>", lambda e: self.start_button.config(bg="#FFC8A0"))
+        self.start_button.bind("<Enter>", lambda e: self.start_button.config(bg=self.colors["start_btn_hover"]))
         self.start_button.bind("<Leave>", lambda e: self.update_start_button_color())
 
-        self.settings_button = tk.Button(self.btn_frame, text="⚙", font=("Helvetica", 16), width=4, bd=0, bg="#F0F0F0", fg="#555555", pady=3, command=self.open_settings)
+        self.settings_button = tk.Button(self.btn_frame, text="⚙", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.open_settings)
         self.settings_button.pack(side=tk.LEFT, padx=10)
-        self.settings_button.bind("<Enter>", lambda e: self.settings_button.config(bg="#E0E0E0") if self.settings_button['state'] != tk.DISABLED else None)
-        self.settings_button.bind("<Leave>", lambda e: self.settings_button.config(bg="#F0F0F0") if self.settings_button['state'] != tk.DISABLED else None)
+        self.settings_button.bind("<Enter>", lambda e: self.settings_button.config(bg=self.colors["btn_hover"]) if self.settings_button['state'] != tk.DISABLED else None)
+        self.settings_button.bind("<Leave>", lambda e: self.settings_button.config(bg=self.colors["btn_bg"]) if self.settings_button['state'] != tk.DISABLED else None)
+
+        self.stats_button = tk.Button(self.btn_frame, text="📊", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.open_stats)
+        self.stats_button.pack(side=tk.LEFT, padx=10)
+        self.stats_button.bind("<Enter>", lambda e: self.stats_button.config(bg=self.colors["btn_hover"]))
+        self.stats_button.bind("<Leave>", lambda e: self.stats_button.config(bg=self.colors["btn_bg"]))
 
         # 아이콘 이미지 생성
-        self.icon_play = self.create_button_icon("play", "#555555")
+        self.icon_play = self.create_button_icon("play", self.colors["icon_color"])
         self.icon_stop = self.create_button_icon("stop", "white")
-        self.icon_settings = self.create_button_icon("settings", "#555555")
+        self.icon_settings = self.create_button_icon("settings", self.colors["icon_color"])
         self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
+        self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"])
         
         # 버튼에 이미지 적용 (초기 상태)
         self.start_button.config(image=self.icon_play, text="", width=50, height=40)
         self.settings_button.config(image=self.icon_settings, text="", width=50, height=40)
+        self.stats_button.config(image=self.icon_stats, text="", width=50, height=40)
 
         self.tk_image = None
 
@@ -150,6 +163,15 @@ class GodModeApp:
             
             # Draw body
             draw.ellipse((cx-r_body, cy-r_body, cx+r_body, cy+r_body), fill=color)
+            
+        elif shape == "stats":
+            # 막대 그래프 아이콘
+            # Bar 1
+            draw.rectangle([(w*0.2, h*0.6), (w*0.35, h*0.8)], fill=color)
+            # Bar 2
+            draw.rectangle([(w*0.425, h*0.4), (w*0.575, h*0.8)], fill=color)
+            # Bar 3
+            draw.rectangle([(w*0.65, h*0.2), (w*0.8, h*0.8)], fill=color)
 
         image = image.resize(size, resample=Image.LANCZOS)
         return ImageTk.PhotoImage(image)
@@ -166,8 +188,8 @@ class GodModeApp:
         scale = 2
         img_w, img_h = w * scale, h * scale
         
-        # 투명 배경 대신 캔버스 배경색(#FFF8F0)으로 이미지 생성
-        image = Image.new("RGBA", (img_w, img_h), "#FFF8F0")
+        # 투명 배경 대신 캔버스 배경색으로 이미지 생성
+        image = Image.new("RGBA", (img_w, img_h), self.colors["bg"])
         draw = ImageDraw.Draw(image)
         
         cx, cy = img_w / 2, img_h / 2
@@ -175,7 +197,7 @@ class GodModeApp:
         arc_radius = radius * 0.65
         
         # 0. 배경 원
-        draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius), fill="#FFFFFF", outline="black", width=int(2*scale))
+        draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius), fill=self.colors["timer_bg"], outline=self.colors["timer_outline"], width=int(2*scale))
         
         # 1. 남은 시간 영역 그리기
         display_time = min(self.current_time, 3600)
@@ -217,7 +239,7 @@ class GodModeApp:
                 tx = cx + text_radius * math.cos(angle_rad)
                 ty = cy - text_radius * math.sin(angle_rad)
                 text = str(i if i != 0 else 60)
-                draw.text((tx, ty), text, font=font, fill="black", anchor="mm")
+                draw.text((tx, ty), text, font=font, fill=self.colors["timer_outline"], anchor="mm")
             else:
                 tick_len = 10 * scale
                 width = 1 * scale
@@ -227,11 +249,11 @@ class GodModeApp:
             x_in = cx + (radius - tick_len) * math.cos(angle_rad)
             y_in = cy - (radius - tick_len) * math.sin(angle_rad)
             
-            draw.line((x_in, y_in, x_out, y_out), fill="black", width=int(width))
+            draw.line((x_in, y_in, x_out, y_out), fill=self.colors["timer_outline"], width=int(width))
 
         # 4. 중앙 디지털 시간 표시
         center_radius = radius * 0.175
-        draw.ellipse((cx-center_radius, cy-center_radius, cx+center_radius, cy+center_radius), fill="#F0F0F0")
+        draw.ellipse((cx-center_radius, cy-center_radius, cx+center_radius, cy+center_radius), fill=self.colors["timer_center"])
         
         mins, secs = divmod(int(self.current_time), 60)
         time_str = "{:02d}:{:02d}".format(mins, secs)
@@ -248,7 +270,7 @@ class GodModeApp:
                 except IOError:
                     font_time = ImageFont.load_default()
             
-        draw.text((cx, cy), time_str, font=font_time, fill="#555555", anchor="mm")
+        draw.text((cx, cy), time_str, font=font_time, fill=self.colors["fg"], anchor="mm")
 
         # 이미지 리사이즈 (안티앨리어싱) 및 캔버스에 표시
         image = image.resize((w, h), resample=Image.BILINEAR)
@@ -363,9 +385,9 @@ class GodModeApp:
 
     def update_start_button_color(self):
         if self.is_running:
-            self.start_button.config(image=self.icon_stop, bg="#FF9AA2")
+            self.start_button.config(image=self.icon_stop, bg=self.colors["stop_btn_bg"])
         else:
-            self.start_button.config(image=self.icon_play, bg="#FFDAC1")
+            self.start_button.config(image=self.icon_play, bg=self.colors["start_btn_bg"])
 
     def enable_settings_button(self):
         self.settings_button.config(state=tk.NORMAL, image=self.icon_settings)
@@ -433,6 +455,8 @@ class GodModeApp:
         self.setting_long_break_interval = 4
         self.save_settings_to_file()
         self.root.attributes('-topmost', self.setting_always_on_top)
+        self.update_theme_colors()
+        self.apply_theme()
 
     def save_settings_to_file(self):
         data = {
@@ -494,6 +518,50 @@ class GodModeApp:
 
     def open_settings(self):
         open_settings_window(self)
+
+    def open_stats(self):
+        open_stats_window(self)
+
+    def update_theme_colors(self):
+        self.colors = {
+            "bg": "#FFF8F0",
+            "fg": "#555555",
+            "fg_sub": "#888888",
+            "btn_bg": "#F0F0F0",
+            "btn_fg": "#555555",
+            "btn_hover": "#E0E0E0",
+            "timer_bg": "#FFFFFF",
+            "timer_center": "#F0F0F0",
+            "timer_work": "#FF5252",
+            "timer_break": "#4CAF50",
+            "timer_outline": "black",
+            "start_btn_bg": "#FFDAC1",
+            "start_btn_hover": "#FFC8A0",
+            "stop_btn_bg": "#FF9AA2",
+            "icon_color": "#555555",
+            "stats_bar_today": "#FF5252",
+            "stats_bar_other": "#FFCDD2"
+        }
+
+    def apply_theme(self):
+        self.root.configure(bg=self.colors["bg"])
+        self.canvas.configure(bg=self.colors["bg"])
+        self.btn_frame.configure(bg=self.colors["bg"])
+        
+        self.start_button.configure(fg=self.colors["btn_fg"])
+        self.settings_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
+        self.stats_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
+        
+        self.icon_play = self.create_button_icon("play", self.colors["icon_color"])
+        self.icon_settings = self.create_button_icon("settings", self.colors["icon_color"])
+        self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
+        self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"])
+        
+        self.settings_button.config(image=self.icon_settings)
+        self.stats_button.config(image=self.icon_stats)
+        self.update_start_button_color()
+        
+        self.draw_timer()
 
 if __name__ == "__main__":
     root = tk.Tk()

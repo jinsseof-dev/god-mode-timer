@@ -1,5 +1,4 @@
 import sys
-import subprocess
 import os
 from datetime import datetime
 import time
@@ -53,29 +52,35 @@ def log_godmode():
         print(f"\n로그 저장 실패: {e}")
 
 def show_toast(title, message):
-    """Windows 10/11 알림 센터에 토스트 메시지를 띄웁니다."""
+    """Windows 10/11 알림 센터에 토스트 메시지를 띄웁니다. (WinRT 사용)"""
     if sys.platform != "win32":
         return
 
-    # PowerShell 스크립트 (System.Windows.Forms.NotifyIcon 사용)
-    # Windows.UI.Notifications는 시작 메뉴 바로가기가 없으면 토스트가 뜨지 않고 알림 센터에만 남을 수 있음
-    # 따라서 NotifyIcon(BalloonTip) 방식을 사용하여 즉시 팝업되도록 변경
-    ps_script = f"""
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
-    $notify = New-Object System.Windows.Forms.NotifyIcon
-    $notify.Icon = [System.Drawing.SystemIcons]::Information
-    $notify.Visible = $True
-    $notify.BalloonTipTitle = "{title}"
-    $notify.BalloonTipText = "{message}"
-    $notify.ShowBalloonTip(5000)
-    Start-Sleep -s 5
-    $notify.Dispose()
-    """
-    
     try:
-        # CREATE_NO_WINDOW = 0x08000000
-        # Popen을 사용하여 비동기로 실행 (GUI 프리징 방지)
-        subprocess.Popen(["powershell", "-Command", ps_script], creationflags=0x08000000)
-    except Exception:
-        pass
+        from winrt.windows.ui.notifications import ToastNotificationManager, ToastNotification
+        from winrt.windows.data.xml.dom import XmlDocument
+    except ImportError:
+        print("⚠️ WinRT 라이브러리가 없습니다. 'pip install -r requirements.txt'를 실행해주세요.")
+        return
+
+    try:
+        # XML 템플릿 정의
+        toast_xml = f"<toast><visual><binding template='ToastGeneric'><text>{title}</text><text>{message}</text></binding></visual></toast>"
+        
+        # XML 로드 및 알림 생성
+        xml_doc = XmlDocument()
+        xml_doc.load_xml(toast_xml)
+        notification = ToastNotification(xml_doc)
+        
+        # 알림 표시
+        # MSIX 패키지 환경에서는 인자 없이 호출해야 앱 ID를 자동으로 인식하여 작동합니다.
+        # 개발 환경(python gui.py)에서는 시작 메뉴 바로가기가 없으므로 '요소 없음' 에러가 발생할 수 있습니다.
+        notifier = ToastNotificationManager.create_toast_notifier()
+        notifier.show(notification)
+    except OSError as e:
+        if e.winerror == -2147023728: # Element not found (0x80070490)
+            print("ℹ️ 개발 모드 알림: MSIX 패키지가 아니어서 WinRT 알림이 표시되지 않았습니다. (설치 후 정상 작동)")
+        else:
+            print(f"⚠️ 알림 전송 실패 (OSError): {e}")
+    except Exception as e:
+        print(f"⚠️ 알림 전송 실패: {e}")
