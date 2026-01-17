@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
-from utils import play_sound, log_godmode, show_toast, play_tick_sound
+from utils import play_sound, log_godmode, show_toast, play_tick_sound, parse_logs
 from taskbar import WindowsTaskbar
 from common import resource_path, get_user_data_path
 from settings_window import open_settings_window
@@ -15,6 +15,7 @@ import os
 import pystray
 from pystray import MenuItem as item
 import threading
+from datetime import datetime
 
 class GodModeApp:
     def __init__(self, root):
@@ -43,6 +44,12 @@ class GodModeApp:
         # 윈도우 자석 효과 (Snap to Edge)
         self.root.bind("<Configure>", self.snap_to_edge)
 
+        # 스페이스바 단축키
+        self.root.bind("<space>", self.toggle_timer_shortcut)
+
+        # 마우스 휠로 시간 조절
+        self.root.bind("<MouseWheel>", self.handle_mouse_wheel)
+
         # 상태 변수
         self.is_running = False
         self.setting_always_on_top = True
@@ -53,22 +60,25 @@ class GodModeApp:
         self.setting_long_break_min = 15
         self.setting_long_break_interval = 4
         self.setting_show_task_input = False
+        self.setting_strict_mode = False
+        self.setting_opacity = 1.0
         self.is_mini_mode = False
         self.normal_geometry = "300x350"
         
         # 설정 파일 로드
         self.load_settings()
+        self.refresh_today_count()
         
         # 테마 색상 정의 및 적용
         self.update_theme_colors()
         
-        self.root.attributes('-topmost', self.setting_always_on_top)
+        self.update_topmost_status()
+        self.update_opacity()
         self.root.configure(bg=self.colors["bg"])
         
         self.work_time = self.setting_work_min * 60
         self.break_time = self.setting_short_break_min * 60
         self.current_time = self.work_time
-        self.godmode_count = 0
         self.mode = "work"  # 'work' or 'break'
 
         # 타이머 표시 (도형)
@@ -89,24 +99,29 @@ class GodModeApp:
         self.btn_frame.pack(pady=(0, 15))
 
         self.start_button = tk.Button(self.btn_frame, text="▶", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["start_btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.toggle_timer)
-        self.start_button.pack(side=tk.LEFT, padx=10)
+        self.start_button.pack(side=tk.LEFT, padx=2)
         self.start_button.bind("<Enter>", lambda e: self.start_button.config(bg=self.colors["start_btn_hover"]))
         self.start_button.bind("<Leave>", lambda e: self.update_start_button_color())
 
         self.stats_button = tk.Button(self.btn_frame, text="📊", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.open_stats)
-        self.stats_button.pack(side=tk.LEFT, padx=10)
+        self.stats_button.pack(side=tk.LEFT, padx=2)
         self.stats_button.bind("<Enter>", lambda e: self.stats_button.config(bg=self.colors["btn_hover"]))
         self.stats_button.bind("<Leave>", lambda e: self.stats_button.config(bg=self.colors["btn_bg"]))
 
         self.settings_button = tk.Button(self.btn_frame, text="⚙", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.open_settings)
-        self.settings_button.pack(side=tk.LEFT, padx=10)
+        self.settings_button.pack(side=tk.LEFT, padx=2)
         self.settings_button.bind("<Enter>", lambda e: self.settings_button.config(bg=self.colors["btn_hover"]) if self.settings_button['state'] != tk.DISABLED else None)
         self.settings_button.bind("<Leave>", lambda e: self.settings_button.config(bg=self.colors["btn_bg"]) if self.settings_button['state'] != tk.DISABLED else None)
 
         self.mini_button = tk.Button(self.btn_frame, text="🗖", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.toggle_mini_mode)
-        self.mini_button.pack(side=tk.LEFT, padx=10)
+        self.mini_button.pack(side=tk.LEFT, padx=2)
         self.mini_button.bind("<Enter>", lambda e: self.mini_button.config(bg=self.colors["btn_hover"]))
         self.mini_button.bind("<Leave>", lambda e: self.mini_button.config(bg=self.colors["btn_bg"]))
+
+        self.skip_button = tk.Button(self.btn_frame, text="⏭", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.skip_break)
+        self.skip_button.bind("<Enter>", lambda e: self.skip_button.config(bg=self.colors["btn_hover"]))
+        self.skip_button.bind("<Leave>", lambda e: self.skip_button.config(bg=self.colors["btn_bg"]))
+        # skip_button은 휴식 시간에만 표시되므로 초기에는 pack하지 않음
 
         # 아이콘 이미지 생성
         self.icon_play = self.create_button_icon("play", self.colors["icon_color"], size=(24, 24))
@@ -115,12 +130,14 @@ class GodModeApp:
         self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
         self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"])
         self.icon_mini = self.create_button_icon("mini", self.colors["icon_color"])
+        self.icon_skip = self.create_button_icon("skip", self.colors["icon_color"])
         
         # 버튼에 이미지 적용 (초기 상태)
         self.start_button.config(image=self.icon_play, text="", width=50, height=40)
         self.settings_button.config(image=self.icon_settings, text="", width=50, height=40)
         self.stats_button.config(image=self.icon_stats, text="", width=50, height=40)
         self.mini_button.config(image=self.icon_mini, text="", width=50, height=40)
+        self.skip_button.config(image=self.icon_skip, text="", width=50, height=40)
 
         # 할 일 입력 프레임 (Task Input)
         self.task_frame = tk.Frame(root, bg=self.colors["bg"])
@@ -140,6 +157,7 @@ class GodModeApp:
         
         # 설정에 따라 할 일 입력창 표시 여부 결정
         self.update_task_input_visibility()
+        self.update_skip_button_visibility()
 
     def set_window_icon(self):
         # 윈도우 아이콘 동적 생성 (황금 번개 - 갓생 모드)
@@ -192,13 +210,19 @@ class GodModeApp:
 
     def _show_window_safe(self):
         self.root.deiconify()
-        self.root.attributes('-topmost', self.setting_always_on_top)
+        self.update_topmost_status()
         self.root.lift()
         self.root.focus_force()
 
     def quit_app_from_tray(self, icon=None, item=None):
+        self.root.after(0, self._handle_tray_quit)
+
+    def _handle_tray_quit(self):
+        if self.is_running and self.mode == "work" and self.setting_strict_mode:
+            show_toast("엄격 모드", "집중 중에는 종료할 수 없습니다!")
+            return
         self.tray_icon.stop()
-        self.root.after(0, self._quit_app_safe)
+        self._quit_app_safe()
 
     def _quit_app_safe(self):
         self.save_settings_to_file()
@@ -262,6 +286,13 @@ class GodModeApp:
             # BR
             draw.line([(w-m, h-m), (w-m, h-m-l)], fill=color, width=int(scale*1.5))
             draw.line([(w-m, h-m), (w-m-l, h-m)], fill=color, width=int(scale*1.5))
+            
+        elif shape == "skip":
+            # Skip icon (Next track style: |>|)
+            # Triangle
+            draw.polygon([(w*0.25, h*0.2), (w*0.25, h*0.8), (w*0.65, h*0.5)], fill=color)
+            # Line
+            draw.rectangle([(w*0.65, h*0.2), (w*0.75, h*0.8)], fill=color)
 
         image = image.resize(size, resample=Image.LANCZOS)
         return ImageTk.PhotoImage(image)
@@ -359,6 +390,36 @@ class GodModeApp:
             
         draw.text((cx, cy), time_str, font=font_time, fill=self.colors["fg"], anchor="mm")
         
+        # 6. 집중 사이클 트래커 (Cycle Tracker) - 중앙 하단
+        if not self.is_mini_mode:
+            cycle_len = self.setting_long_break_interval
+            # 현재 사이클 내 완료 횟수 계산
+            if self.mode == "break" and self.today_count > 0 and self.today_count % cycle_len == 0:
+                # 롱 브레이크 중일 때는 꽉 찬 상태로 표시
+                current_cycle_count = cycle_len
+            else:
+                current_cycle_count = self.today_count % cycle_len
+            
+            # 점 그리기 설정
+            dot_radius = 4 * scale
+            dot_spacing = 10 * scale
+            total_width = (cycle_len * dot_radius * 2) + ((cycle_len - 1) * dot_spacing)
+            start_x = cx - (total_width / 2) + dot_radius
+            dot_y = cy + (radius * 0.45) # 시간 텍스트 아래 적절한 위치
+            
+            for i in range(cycle_len):
+                dx = start_x + i * (dot_radius * 2 + dot_spacing)
+                
+                if i < current_cycle_count:
+                    fill_color = self.colors["fg"]
+                    outline_color = self.colors["fg"]
+                else:
+                    fill_color = self.colors["timer_center"]
+                    outline_color = "#AAAAAA"
+                
+                draw.ellipse((dx - dot_radius, dot_y - dot_radius, dx + dot_radius, dot_y + dot_radius), 
+                             fill=fill_color, outline=outline_color, width=int(1.5*scale))
+        
         # 이미지 리사이즈 (안티앨리어싱) 및 캔버스에 표시
         image = image.resize((w, h), resample=Image.BILINEAR)
         self.tk_image = ImageTk.PhotoImage(image)
@@ -393,7 +454,7 @@ class GodModeApp:
             self.root.overrideredirect(True)
             self.root.minsize(0, 0)
             self.root.geometry("200x200")
-            self.root.attributes('-topmost', True)
+            self.update_topmost_status()
             
             # 드래그 이동 및 복귀 이벤트 바인딩
             self.canvas.unbind("<Button-1>")
@@ -417,10 +478,11 @@ class GodModeApp:
         self.root.overrideredirect(False)
         self.root.minsize(300, 350)
         self.root.geometry(self.normal_geometry)
-        self.root.attributes('-topmost', self.setting_always_on_top)
+        self.update_topmost_status()
         
         # UI 복원
         self.update_task_input_visibility()
+        self.update_skip_button_visibility()
         self.btn_frame.pack(pady=(0, 15))
         
         # 이벤트 복원
@@ -449,14 +511,44 @@ class GodModeApp:
         y = self.root.winfo_y() + deltay
         self.root.geometry(f"+{x}+{y}")
 
+    def skip_break(self):
+        """휴식을 건너뛰고 즉시 집중 모드로 전환합니다."""
+        if self.mode != "break": return
+        
+        self.mode = "work"
+        self.current_time = self.work_time
+        
+        was_running = self.is_running
+        self.is_running = True
+        self.update_topmost_status()
+        self.last_time = time.time()
+        
+        self.update_start_button_color()
+        self.update_skip_button_visibility()
+        self.disable_settings_button()
+        self.disable_task_entry()
+        
+        show_toast("집중 시작", "휴식을 건너뛰고 집중을 시작합니다.")
+        self.draw_timer()
+        
+        if not was_running:
+            self.count_down()
+
     def toggle_timer(self):
         if self.is_running:
+            # 엄격 모드 체크 (집중 모드일 때만)
+            if self.mode == "work" and self.setting_strict_mode:
+                show_toast("엄격 모드", "집중 중에는 타이머를 멈출 수 없습니다!")
+                return
+
             # 실행 중이면 중지(초기화)
             self.reset_timer()
         else:
             # 정지 상태면 시작
             self.is_running = True
+            self.update_topmost_status()
             self.update_start_button_color()
+            self.update_skip_button_visibility()
             self.disable_settings_button()
             self.disable_task_entry()
             
@@ -498,13 +590,13 @@ class GodModeApp:
             self.task_var.set("")
             self.on_task_focus_out(None) # 플레이스홀더 복구
             
-            self.godmode_count += 1
+            self.refresh_today_count()
             self.mode = "break"
             
             # 4번 집중(4의 배수)마다 15분 긴 휴식
-            if self.godmode_count > 0 and self.godmode_count % self.setting_long_break_interval == 0:
+            if self.today_count > 0 and self.today_count % self.setting_long_break_interval == 0:
                 self.break_time = self.setting_long_break_min * 60
-                msg = f"{self.setting_long_break_interval}번의 집중({self.godmode_count}회) 완료! {self.setting_long_break_min}분간 긴 휴식을 취하세요."
+                msg = f"{self.setting_long_break_interval}번의 집중({self.today_count}회) 완료! {self.setting_long_break_min}분간 긴 휴식을 취하세요."
             else:
                 self.break_time = self.setting_short_break_min * 60
                 msg = "집중 시간이 끝났습니다! 휴식을 취하세요."
@@ -514,13 +606,17 @@ class GodModeApp:
             if self.setting_auto_start:
                 show_toast("집중 완료", msg + " (자동 시작)")
                 self.is_running = True
+                self.update_topmost_status()
                 self.update_start_button_color()
+                self.update_skip_button_visibility()
                 self.last_time = time.time()
                 self.draw_timer()
                 self.root.after(50, self.count_down)
             else:
                 show_toast("집중 완료", msg)
                 self.is_running = False
+                self.update_topmost_status()
+                self.update_skip_button_visibility()
                 self.enable_settings_button()
                 self.enable_task_entry()
                 self.update_start_button_color()
@@ -532,6 +628,7 @@ class GodModeApp:
             if self.setting_auto_start:
                 show_toast("휴식 완료", "휴식 시간이 끝났습니다! 집중 시간이 시작됩니다.")
                 self.is_running = True
+                self.update_topmost_status()
                 self.update_start_button_color()
                 self.last_time = time.time()
                 self.draw_timer()
@@ -539,6 +636,8 @@ class GodModeApp:
             else:
                 show_toast("휴식 완료", "휴식 시간이 끝났습니다! 다시 집중해볼까요?")
                 self.is_running = False
+                self.update_topmost_status()
+                self.update_skip_button_visibility()
                 self.enable_settings_button()
                 self.enable_task_entry()
                 self.update_start_button_color()
@@ -546,12 +645,18 @@ class GodModeApp:
 
     def reset_timer(self):
         self.is_running = False
+        self.update_topmost_status()
         self.enable_settings_button()
         self.enable_task_entry()
         self.update_start_button_color()
-        self.mode = "work"
         self.work_time = self.setting_work_min * 60
-        self.current_time = self.work_time
+        
+        if self.mode == "work":
+            self.current_time = self.work_time
+        else:
+            self.current_time = self.break_time
+            
+        self.update_skip_button_visibility()
         self.draw_timer()
 
     def update_start_button_color(self):
@@ -559,6 +664,12 @@ class GodModeApp:
             self.start_button.config(image=self.icon_stop, bg=self.colors["stop_btn_bg"])
         else:
             self.start_button.config(image=self.icon_play, bg=self.colors["start_btn_bg"])
+
+    def update_skip_button_visibility(self):
+        if self.mode == "break":
+            self.skip_button.pack(side=tk.LEFT, padx=2)
+        else:
+            self.skip_button.pack_forget()
 
     def enable_settings_button(self):
         self.settings_button.config(state=tk.NORMAL, image=self.icon_settings)
@@ -587,7 +698,15 @@ class GodModeApp:
             self.root.focus_set()
             self.toggle_timer()
 
+    def toggle_timer_shortcut(self, event):
+        focused = self.root.focus_get()
+        # 입력창이나 버튼에 포커스가 있으면 해당 위젯의 기본 동작을 우선함
+        if isinstance(focused, (tk.Entry, tk.Button)):
+            return
+        self.toggle_timer()
+
     def handle_mouse_input(self, event):
+        self.root.focus_set()
         if self.is_running:
             return
 
@@ -599,10 +718,13 @@ class GodModeApp:
         dx = event.x - cx
         dy = event.y - cy
         
-        # 중앙 시간 표시 영역(흰색 원) 내부 클릭 시 무시
+        # 거리 계산
+        dist = math.sqrt(dx*dx + dy*dy)
+        
+        # 중앙 시간 표시 영역(흰색 원) 내부 또는 원 바깥 클릭 시 무시
         radius = min(w, h) / 2 * 0.88
         center_radius = radius * 0.22
-        if math.sqrt(dx*dx + dy*dy) < center_radius:
+        if dist < center_radius or dist > radius:
             return
         
         deg = math.degrees(math.atan2(dy, dx))
@@ -611,12 +733,50 @@ class GodModeApp:
         minutes = round(angle / 6 / 5) * 5
         if minutes == 0: minutes = 60
         
-        if self.setting_work_min != minutes and self.setting_sound:
-            play_tick_sound()
+        if self.mode == "work":
+            if self.setting_work_min != minutes and self.setting_sound:
+                play_tick_sound()
+            self.setting_work_min = minutes
+            self.work_time = minutes * 60
+            self.current_time = self.work_time
+        else:
+            current_break_min = round(self.break_time / 60)
+            if current_break_min != minutes and self.setting_sound:
+                play_tick_sound()
+            self.break_time = minutes * 60
+            self.current_time = self.break_time
+        
+        self.draw_timer()
 
-        self.setting_work_min = minutes
-        self.work_time = minutes * 60
-        self.reset_timer()
+    def handle_mouse_wheel(self, event):
+        if self.is_running:
+            return
+            
+        # 5분 단위 증감
+        step = 5 if event.delta > 0 else -5
+        
+        if self.mode == "work":
+            new_min = self.setting_work_min + step
+            new_min = max(5, min(60, new_min))
+            
+            if self.setting_work_min != new_min:
+                if self.setting_sound:
+                    play_tick_sound()
+                self.setting_work_min = new_min
+                self.work_time = new_min * 60
+                self.current_time = self.work_time
+        else:
+            current_break_min = round(self.break_time / 60)
+            new_min = current_break_min + step
+            new_min = max(5, min(60, new_min))
+            
+            if current_break_min != new_min:
+                if self.setting_sound:
+                    play_tick_sound()
+                self.break_time = new_min * 60
+                self.current_time = self.break_time
+        
+        self.draw_timer()
 
     def load_settings(self):
         settings_path = get_user_data_path("settings.json")
@@ -635,8 +795,16 @@ class GodModeApp:
                 self.setting_long_break_min = data.get("long_break_min", 15)
                 self.setting_long_break_interval = data.get("long_break_interval", 4)
                 self.setting_show_task_input = data.get("show_task_input", False)
+                self.setting_strict_mode = data.get("strict_mode", False)
+                self.setting_opacity = data.get("opacity", 1.0)
         except Exception:
             self.restore_default_settings()
+
+    def refresh_today_count(self):
+        """오늘의 집중 횟수를 로그에서 다시 읽어옵니다."""
+        daily_stats = parse_logs()
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        self.today_count = daily_stats.get(today_str, {'count': 0})['count']
 
     def restore_default_settings(self):
         self.setting_always_on_top = True
@@ -647,11 +815,14 @@ class GodModeApp:
         self.setting_long_break_min = 15
         self.setting_long_break_interval = 4
         self.setting_show_task_input = False
+        self.setting_strict_mode = False
         self.save_settings_to_file()
-        self.root.attributes('-topmost', self.setting_always_on_top)
+        self.setting_opacity = 1.0
+        self.update_topmost_status()
         self.update_theme_colors()
         self.apply_theme()
         self.update_task_input_visibility()
+        self.update_opacity()
 
     def save_settings_to_file(self):
         data = {
@@ -662,7 +833,9 @@ class GodModeApp:
             "short_break_min": self.setting_short_break_min,
             "long_break_min": self.setting_long_break_min,
             "long_break_interval": self.setting_long_break_interval,
-            "show_task_input": self.setting_show_task_input
+            "show_task_input": self.setting_show_task_input,
+            "strict_mode": self.setting_strict_mode,
+            "opacity": self.setting_opacity
         }
         try:
             with open(get_user_data_path("settings.json"), "w", encoding="utf-8") as f:
@@ -671,6 +844,9 @@ class GodModeApp:
             pass
 
     def on_closing(self):
+        if self.is_running and self.mode == "work" and self.setting_strict_mode:
+            messagebox.showwarning("엄격 모드", "집중 중에는 종료할 수 없습니다!")
+            return
         self.show_exit_popup()
 
     def show_exit_popup(self):
@@ -752,6 +928,18 @@ class GodModeApp:
     def open_stats(self):
         open_stats_window(self)
 
+    def update_topmost_status(self):
+        """현재 상태에 따라 윈도우의 최상위 속성을 업데이트합니다."""
+        if self.is_mini_mode:
+            self.root.attributes('-topmost', True)
+        elif self.is_running and self.setting_always_on_top:
+            self.root.attributes('-topmost', True)
+        else:
+            self.root.attributes('-topmost', False)
+
+    def update_opacity(self):
+        self.root.attributes('-alpha', self.setting_opacity)
+
     def update_task_input_visibility(self):
         if self.setting_show_task_input:
             self.task_frame.pack(pady=(0, 10), fill=tk.X, padx=30)
@@ -788,6 +976,7 @@ class GodModeApp:
         self.settings_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         self.stats_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         self.mini_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
+        self.skip_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         
         if hasattr(self, 'task_frame'):
             self.task_frame.configure(bg=self.colors["bg"])
@@ -802,10 +991,12 @@ class GodModeApp:
         self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
         self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"])
         self.icon_mini = self.create_button_icon("mini", self.colors["icon_color"])
+        self.icon_skip = self.create_button_icon("skip", self.colors["icon_color"])
         
         self.settings_button.config(image=self.icon_settings)
         self.stats_button.config(image=self.icon_stats)
         self.mini_button.config(image=self.icon_mini)
+        self.skip_button.config(image=self.icon_skip)
         self.update_start_button_color()
         
         self.draw_timer()

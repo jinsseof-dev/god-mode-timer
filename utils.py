@@ -5,6 +5,8 @@ import time
 from common import get_user_data_path
 import json
 import threading
+import csv
+from tkinter import filedialog, messagebox
 
 def play_sound():
     """운영체제에 맞는 알림음을 재생합니다 (시스템 비프음 사용)."""
@@ -61,6 +63,57 @@ def log_godmode(task_name=None, duration=25, status="success"):
     except Exception as e:
         print(f"\n로그 저장 실패: {e}")
 
+def export_csv(parent):
+    """로그 데이터를 CSV 파일로 내보냅니다."""
+    log_path = get_user_data_path("godmode_log.txt")
+    if not os.path.exists(log_path):
+        messagebox.showinfo("알림", "기록된 로그가 없습니다.", parent=parent)
+        return
+
+    file_path = filedialog.asksaveasfilename(
+        parent=parent,
+        defaultextension=".csv",
+        filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        title="CSV로 내보내기",
+        initialfile=f"godmode_logs_{datetime.now().strftime('%Y%m%d')}.csv"
+    )
+
+    if not file_path:
+        return
+
+    try:
+        with open(log_path, "r", encoding="utf-8") as f_in, \
+             open(file_path, "w", encoding="utf-8-sig", newline="") as f_out:
+            
+            writer = csv.writer(f_out)
+            writer.writerow(["Timestamp", "Duration (min)", "Task", "Status"])
+            
+            for line in f_in:
+                line = line.strip()
+                if not line: continue
+                
+                try:
+                    data = json.loads(line)
+                    writer.writerow([
+                        data.get("timestamp", ""),
+                        data.get("duration", 25),
+                        data.get("task") or "",
+                        data.get("status", "success")
+                    ])
+                except json.JSONDecodeError:
+                    # 기존 텍스트 형식 파싱 (하위 호환성)
+                    if "]" in line:
+                        parts = line.split("]")
+                        timestamp = parts[0].strip("[")
+                        task = ""
+                        if "-" in parts[1]:
+                            task = parts[1].split("-", 1)[1].strip()
+                        writer.writerow([timestamp, 25, task, "success"])
+                    
+        messagebox.showinfo("완료", "CSV 내보내기가 완료되었습니다.", parent=parent)
+    except Exception as e:
+        messagebox.showerror("오류", f"내보내기 실패: {e}", parent=parent)
+
 def show_toast(title, message):
     """Windows 10/11 알림 센터에 토스트 메시지를 띄웁니다. (WinRT 사용)"""
     if sys.platform != "win32":
@@ -89,8 +142,70 @@ def show_toast(title, message):
         notifier.show(notification)
     except OSError as e:
         if e.winerror == -2147023728: # Element not found (0x80070490)
-            print("ℹ️ 개발 모드 알림: MSIX 패키지가 아니어서 WinRT 알림이 표시되지 않았습니다. (설치 후 정상 작동)")
+            pass
         else:
             print(f"⚠️ 알림 전송 실패 (OSError): {e}")
     except Exception as e:
         print(f"⚠️ 알림 전송 실패: {e}")
+
+def parse_logs():
+    """로그 파일을 읽어 날짜별 집중 횟수와 시간을 계산합니다."""
+    log_path = get_user_data_path("godmode_log.txt")
+    if not os.path.exists(log_path):
+        return {}
+    
+    daily_stats = {}
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line: continue
+                
+                timestamp_str = None
+                duration = 25
+                status = "success"
+                
+                # 1. JSON 파싱 시도
+                try:
+                    entry = json.loads(line)
+                    timestamp_str = entry.get("timestamp")
+                    duration = entry.get("duration", 25)
+                    status = entry.get("status", "success")
+                except json.JSONDecodeError:
+                    # 2. 기존 텍스트 형식 파싱 (하위 호환성)
+                    if "]" in line:
+                        timestamp_str = line.split("]")[0].strip("[")
+                
+                if timestamp_str:
+                    try:
+                        dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                        date_key = dt.strftime("%Y-%m-%d")
+                        
+                        if date_key not in daily_stats:
+                            daily_stats[date_key] = {'count': 0, 'duration': 0}
+                        
+                        if status == "success":
+                            daily_stats[date_key]['count'] += 1
+                            daily_stats[date_key]['duration'] += int(duration)
+                    except ValueError:
+                        continue
+    except Exception:
+        pass
+    return daily_stats
+
+def get_side_position(root, width, height, offset=10):
+    """메인 윈도우 우측(공간 부족 시 좌측)에 팝업 위치를 반환합니다."""
+    main_x = root.winfo_x()
+    main_y = root.winfo_y()
+    main_w = root.winfo_width()
+    
+    # 기본적으로 우측에 배치
+    x = main_x + main_w + offset
+    y = main_y
+    
+    # 화면 너비를 벗어나면 좌측에 배치
+    screen_width = root.winfo_screenwidth()
+    if x + width > screen_width:
+        x = main_x - width - offset
+        
+    return f"+{x}+{y}"
