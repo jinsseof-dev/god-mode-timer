@@ -89,6 +89,7 @@ class GodModeApp:
         self.canvas.bind("<Configure>", lambda e: self.draw_timer())
         self.canvas.bind("<Button-1>", self.handle_mouse_input)
         self.canvas.bind("<B1-Motion>", self.handle_mouse_input)
+        self.canvas.bind("<Double-Button-1>", self.on_canvas_double_click)
         
         # 마우스 커서 변경
         self.canvas.bind("<Enter>", lambda e: self.root.config(cursor="hand2"))
@@ -113,11 +114,6 @@ class GodModeApp:
         self.settings_button.bind("<Enter>", lambda e: self.settings_button.config(bg=self.colors["btn_hover"]) if self.settings_button['state'] != tk.DISABLED else None)
         self.settings_button.bind("<Leave>", lambda e: self.settings_button.config(bg=self.colors["btn_bg"]) if self.settings_button['state'] != tk.DISABLED else None)
 
-        self.mini_button = tk.Button(self.btn_frame, text="🗖", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.toggle_mini_mode)
-        self.mini_button.pack(side=tk.LEFT, padx=2)
-        self.mini_button.bind("<Enter>", lambda e: self.mini_button.config(bg=self.colors["btn_hover"]))
-        self.mini_button.bind("<Leave>", lambda e: self.mini_button.config(bg=self.colors["btn_bg"]))
-
         self.skip_button = tk.Button(self.btn_frame, text="⏭", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.skip_break)
         self.skip_button.bind("<Enter>", lambda e: self.skip_button.config(bg=self.colors["btn_hover"]))
         self.skip_button.bind("<Leave>", lambda e: self.skip_button.config(bg=self.colors["btn_bg"]))
@@ -129,14 +125,12 @@ class GodModeApp:
         self.icon_settings = self.create_button_icon("settings", self.colors["icon_color"])
         self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
         self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"])
-        self.icon_mini = self.create_button_icon("mini", self.colors["icon_color"])
         self.icon_skip = self.create_button_icon("skip", self.colors["icon_color"])
         
         # 버튼에 이미지 적용 (초기 상태)
         self.start_button.config(image=self.icon_play, text="", width=50, height=40)
         self.settings_button.config(image=self.icon_settings, text="", width=50, height=40)
         self.stats_button.config(image=self.icon_stats, text="", width=50, height=40)
-        self.mini_button.config(image=self.icon_mini, text="", width=50, height=40)
         self.skip_button.config(image=self.icon_skip, text="", width=50, height=40)
 
         # 할 일 입력 프레임 (Task Input)
@@ -269,23 +263,6 @@ class GodModeApp:
             draw.rectangle([(w*0.425, h*0.4), (w*0.575, h*0.8)], fill=color)
             # Bar 3
             draw.rectangle([(w*0.65, h*0.2), (w*0.8, h*0.8)], fill=color)
-            
-        elif shape == "mini":
-            # 축소 아이콘 (네 모서리 안쪽 표시)
-            m = w * 0.25
-            l = w * 0.2
-            # TL
-            draw.line([(m, m), (m, m+l)], fill=color, width=int(scale*1.5))
-            draw.line([(m, m), (m+l, m)], fill=color, width=int(scale*1.5))
-            # TR
-            draw.line([(w-m, m), (w-m, m+l)], fill=color, width=int(scale*1.5))
-            draw.line([(w-m, m), (w-m-l, m)], fill=color, width=int(scale*1.5))
-            # BL
-            draw.line([(m, h-m), (m, h-m-l)], fill=color, width=int(scale*1.5))
-            draw.line([(m, h-m), (m+l, h-m)], fill=color, width=int(scale*1.5))
-            # BR
-            draw.line([(w-m, h-m), (w-m, h-m-l)], fill=color, width=int(scale*1.5))
-            draw.line([(w-m, h-m), (w-m-l, h-m)], fill=color, width=int(scale*1.5))
             
         elif shape == "skip":
             # Skip icon (Next track style: |>|)
@@ -474,10 +451,45 @@ class GodModeApp:
         
         self.is_mini_mode = False
         
-        # 윈도우 복원
+        # 현재 미니모드 위치 및 크기
+        mini_x = self.root.winfo_x()
+        mini_y = self.root.winfo_y()
+        mini_w = self.root.winfo_width()
+        mini_h = self.root.winfo_height()
+        
+        # 일반 모드 크기 파싱
+        match = re.match(r"(\d+)x(\d+)", self.normal_geometry)
+        if match:
+            norm_w = int(match.group(1))
+            norm_h = int(match.group(2))
+        else:
+            norm_w, norm_h = 300, 350
+            
+        # 미니모드 중심점을 기준으로 일반 모드 위치 계산 (확장 효과)
+        new_x = int(mini_x + (mini_w / 2) - (norm_w / 2))
+        new_y = int(mini_y + (mini_h / 2) - (norm_h / 2))
+        
+        # 화면 경계 보정 (화면 밖으로 나가는 것 방지)
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # 오른쪽/아래쪽 벗어남 방지
+        if new_x + norm_w > screen_width:
+            new_x = screen_width - norm_w
+        if new_y + norm_h > screen_height:
+            new_y = screen_height - norm_h
+            
+        # 왼쪽/위쪽 벗어남 방지 (우선순위 높음)
+        if new_x < 0: new_x = 0
+        if new_y < 0: new_y = 0
+        
+        # 윈도우 복원 (깜빡임 방지 및 확실한 적용을 위해 withdraw/deiconify 사용)
+        self.root.withdraw()
         self.root.overrideredirect(False)
         self.root.minsize(300, 350)
-        self.root.geometry(self.normal_geometry)
+        self.root.geometry(f"{norm_w}x{norm_h}+{new_x}+{new_y}")
+        self.root.deiconify()
+        
         self.update_topmost_status()
         
         # UI 복원
@@ -493,6 +505,7 @@ class GodModeApp:
         
         self.canvas.bind("<Button-1>", self.handle_mouse_input)
         self.canvas.bind("<B1-Motion>", self.handle_mouse_input)
+        self.canvas.bind("<Double-Button-1>", self.on_canvas_double_click)
         
         self.draw_timer()
 
@@ -510,6 +523,10 @@ class GodModeApp:
         x = self.root.winfo_x() + deltax
         y = self.root.winfo_y() + deltay
         self.root.geometry(f"+{x}+{y}")
+
+    def on_canvas_double_click(self, event):
+        if not self.is_mini_mode:
+            self.toggle_mini_mode()
 
     def skip_break(self):
         """휴식을 건너뛰고 즉시 집중 모드로 전환합니다."""
@@ -975,7 +992,6 @@ class GodModeApp:
         self.start_button.configure(fg=self.colors["btn_fg"])
         self.settings_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         self.stats_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
-        self.mini_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         self.skip_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         
         if hasattr(self, 'task_frame'):
@@ -990,12 +1006,10 @@ class GodModeApp:
         self.icon_settings = self.create_button_icon("settings", self.colors["icon_color"])
         self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
         self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"])
-        self.icon_mini = self.create_button_icon("mini", self.colors["icon_color"])
         self.icon_skip = self.create_button_icon("skip", self.colors["icon_color"])
         
         self.settings_button.config(image=self.icon_settings)
         self.stats_button.config(image=self.icon_stats)
-        self.mini_button.config(image=self.icon_mini)
         self.skip_button.config(image=self.icon_skip)
         self.update_start_button_color()
         

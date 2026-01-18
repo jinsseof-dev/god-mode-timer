@@ -5,7 +5,7 @@
 
 ## 📊 개발 진척률 (Progress)
 
-**현재 상태: 사용성 개선 및 기능 확장 (v1.16)**
+**현재 상태: 프로젝트 구조 개선 (v1.17)**
 `[==========] 100%`
 
 ## 📝 개발 할 일 (To-Do List)
@@ -72,7 +72,23 @@
 - [x] **CSV 내보내기**: 설정 및 통계 창에서 로그 데이터 내보내기 지원
 - [x] **단축키**: 스페이스바(시작/정지) 지원
 
-## 🚀 설치 및 실행 방법 (Installation & Usage)
+## 📂 프로젝트 구조 (Project Structure)
+
+```text
+god-mod-timer/
+├── src/                  # 애플리케이션 소스 코드
+│   ├── gui.py            # 메인 GUI 진입점
+│   ├── main.py           # CLI 버전 진입점
+│   └── ...               # 기타 모듈 (utils, common, windows 등)
+├── scripts/              # 개발 및 관리용 스크립트
+│   ├── clean.ps1         # 빌드 부산물 정리
+│   └── create_assets.py  # 아이콘 리소스 생성
+├── store_package/        # MSIX 패키징 리소스 (아이콘, 매니페스트 등)
+├── build.py              # PyInstaller 빌드 스크립트
+└── build_msix.ps1        # 전체 빌드 및 패키징 자동화 스크립트
+```
+
+## � 설치 및 실행 방법 (Installation & Usage)
 
 ### 요구 사항
 - Python 3.x
@@ -81,7 +97,7 @@
 ```bash
 python src/main.py
 # GUI 버전 실행
-python gui.py
+python src/gui.py
 ```
 
 ## 📦 배포 및 빌드 (Deployment)
