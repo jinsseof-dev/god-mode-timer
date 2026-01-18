@@ -8,7 +8,7 @@
   <Identity
     Name="jinsseof.God-modTimer"
     Publisher="${PUBLISHER_ID}"
-    Version="1.12.0.0" />
+    Version="1.17.0.0" />
 
   <Properties>
     <DisplayName>God-Mode Timer</DisplayName>
@@ -37,6 +37,7 @@
   </Applications>
 
   <Capabilities>
+    <!-- Win32 앱(Python) 실행을 위한 필수 권한 (최소 권한 상태) -->
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 </Package>

@@ -3,51 +3,7 @@ from datetime import datetime, timedelta
 import os
 from common import get_user_data_path
 import json
-
-def parse_logs():
-    """로그 파일을 읽어 날짜별 집중 횟수와 시간을 계산합니다."""
-    log_path = get_user_data_path("godmode_log.txt")
-    if not os.path.exists(log_path):
-        return {}
-    
-    daily_stats = {}
-    try:
-        with open(log_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line: continue
-                
-                timestamp_str = None
-                duration = 25
-                status = "success"
-                
-                # 1. JSON 파싱 시도
-                try:
-                    entry = json.loads(line)
-                    timestamp_str = entry.get("timestamp")
-                    duration = entry.get("duration", 25)
-                    status = entry.get("status", "success")
-                except json.JSONDecodeError:
-                    # 2. 기존 텍스트 형식 파싱 (하위 호환성)
-                    if "]" in line:
-                        timestamp_str = line.split("]")[0].strip("[")
-                
-                if timestamp_str:
-                    try:
-                        dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-                        date_key = dt.strftime("%Y-%m-%d")
-                        
-                        if date_key not in daily_stats:
-                            daily_stats[date_key] = {'count': 0, 'duration': 0}
-                        
-                        if status == "success":
-                            daily_stats[date_key]['count'] += 1
-                            daily_stats[date_key]['duration'] += int(duration)
-                    except ValueError:
-                        continue
-    except Exception:
-        pass
-    return daily_stats
+from utils import export_csv, parse_logs, get_side_position
 
 def open_stats_window(app):
     """통계 창을 엽니다."""
@@ -58,10 +14,8 @@ def open_stats_window(app):
     sw.configure(bg=app.colors["bg"])
     sw.transient(app.root)
     
-    # 화면 중앙 배치
-    x = app.root.winfo_x() + (app.root.winfo_width() // 2) - 160
-    y = app.root.winfo_y() + (app.root.winfo_height() // 2) - 200
-    sw.geometry(f"+{x}+{y}")
+    # 화면 중앙 배치 -> 우측 배치 (가림 방지)
+    sw.geometry(get_side_position(app.root, 320, 400))
 
     daily_stats = parse_logs()
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -137,3 +91,11 @@ def open_stats_window(app):
     
     tk.Label(footer_frame, text=f"이번 주 집중: {weekly_count}갓생 ({time_str})", font=("Helvetica", 11, "bold"), bg=app.colors["bg"], fg=app.colors["fg"]).pack()
     tk.Label(footer_frame, text=f"(누적 {total_count}갓생)", font=("Helvetica", 9), bg=app.colors["bg"], fg=app.colors["fg_sub"]).pack(pady=(2, 0))
+    
+    # CSV 내보내기 버튼
+    btn_export = tk.Button(footer_frame, text="CSV 내보내기", font=("Helvetica", 9), 
+                           bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], 
+                           bd=0, padx=10, pady=4, command=lambda: export_csv(sw))
+    btn_export.pack(pady=(15, 0))
+    btn_export.bind("<Enter>", lambda e: btn_export.config(bg=app.colors["btn_hover"]))
+    btn_export.bind("<Leave>", lambda e: btn_export.config(bg=app.colors["btn_bg"]))

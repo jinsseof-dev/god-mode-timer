@@ -32,9 +32,10 @@ def create_icon(size):
     return image
 
 def main():
-    # 저장할 폴더 경로 설정 (store_package/Assets)
+    # 저장할 폴더 경로 설정 (scripts 폴더 상위 -> store_package/Assets)
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    assets_dir = os.path.join(base_dir, "store_package", "Assets")
+    project_root = os.path.dirname(base_dir)
+    assets_dir = os.path.join(project_root, "store_package", "Assets")
     
     # 폴더가 없으면 생성
     if not os.path.exists(assets_dir):
