@@ -78,7 +78,7 @@ def build():
     create_app_manifest()
     
     options = [
-        'gui.py',                        # 메인 소스 파일
+        os.path.join('src', 'gui.py'),   # 메인 소스 파일 (src 폴더로 변경)
         '--name=GodModTimer',            # 실행 파일 이름 설정
         '--onefile',                     # 단일 실행 파일(.exe)로 생성
         '--noconsole',                   # GUI 프로그램이므로 콘솔 창 숨김
@@ -91,6 +91,7 @@ def build():
         '--hidden-import=pystray',         # 시스템 트레이 모듈
         '--hidden-import=winrt.windows.storage', # WinRT 스토리지 모듈
         '--manifest=app.manifest',         # High DPI 매니페스트 포함
+        '--paths=src',                     # 소스 경로 추가 (모듈 임포트 해결)
     ]
     
     # 리소스 파일이 존재하는 경우에만 포함 (파일이 없어도 빌드가 되도록 처리)
