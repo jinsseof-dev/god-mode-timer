@@ -7,6 +7,7 @@ import json
 import threading
 import csv
 from tkinter import filedialog, messagebox
+import webbrowser
 
 def play_sound():
     """운영체제에 맞는 알림음을 재생합니다 (시스템 비프음 사용)."""
@@ -209,3 +210,8 @@ def get_side_position(root, width, height, offset=10):
         x = main_x - width - offset
         
     return f"+{x}+{y}"
+
+
+def open_url(url):
+    """기본 웹 브라우저에서 URL을 엽니다."""
+    webbrowser.open(url)
