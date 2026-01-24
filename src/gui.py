@@ -5,6 +5,7 @@ from taskbar import WindowsTaskbar
 from common import resource_path, get_user_data_path
 from settings_window import open_settings_window
 from stats_window import open_stats_window
+from ad_window import show_ad_window
 import time
 import math
 import sys
@@ -21,9 +22,9 @@ class GodModeApp:
     def __init__(self, root):
         self.root = root
         self.root.title("God-Mode Timer")
-        self.root.geometry("300x350")
+        self.root.geometry("300x400")
         self.root.resizable(True, True)
-        self.root.minsize(300, 350)
+        self.root.minsize(300, 400)
         
 
         # 윈도우 작업 표시줄 진행률 초기화
@@ -63,7 +64,7 @@ class GodModeApp:
         self.setting_strict_mode = False
         self.setting_opacity = 1.0
         self.is_mini_mode = False
-        self.normal_geometry = "300x350"
+        self.normal_geometry = "300x400"
         
         # 설정 파일 로드
         self.load_settings()
@@ -118,6 +119,11 @@ class GodModeApp:
         self.skip_button.bind("<Enter>", lambda e: self.skip_button.config(bg=self.colors["btn_hover"]))
         self.skip_button.bind("<Leave>", lambda e: self.skip_button.config(bg=self.colors["btn_bg"]))
         # skip_button은 휴식 시간에만 표시되므로 초기에는 pack하지 않음
+        
+        self.repeat_button = tk.Button(self.btn_frame, text="🔁", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.repeat_break)
+        self.repeat_button.bind("<Enter>", lambda e: self.repeat_button.config(bg=self.colors["btn_hover"]))
+        self.repeat_button.bind("<Leave>", lambda e: self.repeat_button.config(bg=self.colors["btn_bg"]))
+        # repeat_button은 집중 모드 대기 상태에서만 표시됨
 
         # 아이콘 이미지 생성
         self.icon_play = self.create_button_icon("play", self.colors["icon_color"], size=(24, 24))
@@ -126,12 +132,14 @@ class GodModeApp:
         self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
         self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"])
         self.icon_skip = self.create_button_icon("skip", self.colors["icon_color"])
+        self.icon_repeat = self.create_button_icon("repeat", self.colors["icon_color"])
         
         # 버튼에 이미지 적용 (초기 상태)
         self.start_button.config(image=self.icon_play, text="", width=50, height=40)
         self.settings_button.config(image=self.icon_settings, text="", width=50, height=40)
         self.stats_button.config(image=self.icon_stats, text="", width=50, height=40)
         self.skip_button.config(image=self.icon_skip, text="", width=50, height=40)
+        self.repeat_button.config(image=self.icon_repeat, text="", width=50, height=40)
 
         # 할 일 입력 프레임 (Task Input)
         self.task_frame = tk.Frame(root, bg=self.colors["bg"])
@@ -151,7 +159,7 @@ class GodModeApp:
         
         # 설정에 따라 할 일 입력창 표시 여부 결정
         self.update_task_input_visibility()
-        self.update_skip_button_visibility()
+        self.update_control_buttons_visibility()
 
     def set_window_icon(self):
         # 윈도우 아이콘 동적 생성 (황금 번개 - 갓생 모드)
@@ -212,8 +220,8 @@ class GodModeApp:
         self.root.after(0, self._handle_tray_quit)
 
     def _handle_tray_quit(self):
-        if self.is_running and self.mode == "work" and self.setting_strict_mode:
-            show_toast("엄격 모드", "집중 중에는 종료할 수 없습니다!")
+        if self.is_running and self.mode == "work":
+            show_toast("집중 모드", "집중 중에는 종료할 수 없습니다!")
             return
         self.tray_icon.stop()
         self._quit_app_safe()
@@ -270,6 +278,17 @@ class GodModeApp:
             draw.polygon([(w*0.25, h*0.2), (w*0.25, h*0.8), (w*0.65, h*0.5)], fill=color)
             # Line
             draw.rectangle([(w*0.65, h*0.2), (w*0.75, h*0.8)], fill=color)
+            
+        elif shape == "repeat":
+            # Rest icon (Coffee Cup)
+            # Cup body
+            draw.rectangle([(w*0.2, h*0.4), (w*0.75, h*0.8)], fill=color)
+            # Handle
+            draw.line([(w*0.75, h*0.5), (w*0.9, h*0.5), (w*0.9, h*0.7), (w*0.75, h*0.7)], fill=color, width=int(w*0.08))
+            # Steam
+            draw.line([(w*0.35, h*0.2), (w*0.35, h*0.3)], fill=color, width=int(w*0.06))
+            draw.line([(w*0.5, h*0.15), (w*0.5, h*0.3)], fill=color, width=int(w*0.06))
+            draw.line([(w*0.65, h*0.2), (w*0.65, h*0.3)], fill=color, width=int(w*0.06))
 
         image = image.resize(size, resample=Image.LANCZOS)
         return ImageTk.PhotoImage(image)
@@ -463,7 +482,7 @@ class GodModeApp:
             norm_w = int(match.group(1))
             norm_h = int(match.group(2))
         else:
-            norm_w, norm_h = 300, 350
+            norm_w, norm_h = 300, 400
             
         # 미니모드 중심점을 기준으로 일반 모드 위치 계산 (확장 효과)
         new_x = int(mini_x + (mini_w / 2) - (norm_w / 2))
@@ -486,7 +505,8 @@ class GodModeApp:
         # 윈도우 복원 (깜빡임 방지 및 확실한 적용을 위해 withdraw/deiconify 사용)
         self.root.withdraw()
         self.root.overrideredirect(False)
-        self.root.minsize(300, 350)
+        self.root.resizable(True, True)
+        self.root.minsize(300, 400)
         self.root.geometry(f"{norm_w}x{norm_h}+{new_x}+{new_y}")
         self.root.deiconify()
         
@@ -494,7 +514,7 @@ class GodModeApp:
         
         # UI 복원
         self.update_task_input_visibility()
-        self.update_skip_button_visibility()
+        self.update_control_buttons_visibility()
         self.btn_frame.pack(pady=(0, 15))
         
         # 이벤트 복원
@@ -541,11 +561,34 @@ class GodModeApp:
         self.last_time = time.time()
         
         self.update_start_button_color()
-        self.update_skip_button_visibility()
+        self.update_control_buttons_visibility()
         self.disable_settings_button()
         self.disable_task_entry()
         
         show_toast("집중 시작", "휴식을 건너뛰고 집중을 시작합니다.")
+        self.draw_timer()
+        
+        if not was_running:
+            self.count_down()
+
+    def repeat_break(self):
+        """휴식을 반복합니다 (현재 집중 모드 대기 상태에서 다시 휴식 모드로 전환)."""
+        if self.mode != "work": return
+        
+        self.mode = "break"
+        self.current_time = self.break_time
+        
+        was_running = self.is_running
+        self.is_running = True
+        self.update_topmost_status()
+        self.last_time = time.time()
+        
+        self.update_start_button_color()
+        self.update_control_buttons_visibility()
+        self.disable_settings_button()
+        self.disable_task_entry()
+        
+        show_toast("휴식 반복", "휴식 시간을 연장합니다.")
         self.draw_timer()
         
         if not was_running:
@@ -565,7 +608,7 @@ class GodModeApp:
             self.is_running = True
             self.update_topmost_status()
             self.update_start_button_color()
-            self.update_skip_button_visibility()
+            self.update_control_buttons_visibility()
             self.disable_settings_button()
             self.disable_task_entry()
             
@@ -610,6 +653,10 @@ class GodModeApp:
             self.refresh_today_count()
             self.mode = "break"
             
+            # 집중 완료 시 광고(후원) 팝업 표시 (2회마다)
+            if self.today_count > 0 and self.today_count % 2 == 0:
+                show_ad_window(self)
+            
             # 4번 집중(4의 배수)마다 15분 긴 휴식
             if self.today_count > 0 and self.today_count % self.setting_long_break_interval == 0:
                 self.break_time = self.setting_long_break_min * 60
@@ -625,7 +672,7 @@ class GodModeApp:
                 self.is_running = True
                 self.update_topmost_status()
                 self.update_start_button_color()
-                self.update_skip_button_visibility()
+                self.update_control_buttons_visibility()
                 self.last_time = time.time()
                 self.draw_timer()
                 self.root.after(50, self.count_down)
@@ -633,7 +680,7 @@ class GodModeApp:
                 show_toast("집중 완료", msg)
                 self.is_running = False
                 self.update_topmost_status()
-                self.update_skip_button_visibility()
+                self.update_control_buttons_visibility()
                 self.enable_settings_button()
                 self.enable_task_entry()
                 self.update_start_button_color()
@@ -654,7 +701,7 @@ class GodModeApp:
                 show_toast("휴식 완료", "휴식 시간이 끝났습니다! 다시 집중해볼까요?")
                 self.is_running = False
                 self.update_topmost_status()
-                self.update_skip_button_visibility()
+                self.update_control_buttons_visibility()
                 self.enable_settings_button()
                 self.enable_task_entry()
                 self.update_start_button_color()
@@ -673,7 +720,7 @@ class GodModeApp:
         else:
             self.current_time = self.break_time
             
-        self.update_skip_button_visibility()
+        self.update_control_buttons_visibility()
         self.draw_timer()
 
     def update_start_button_color(self):
@@ -682,11 +729,14 @@ class GodModeApp:
         else:
             self.start_button.config(image=self.icon_play, bg=self.colors["start_btn_bg"])
 
-    def update_skip_button_visibility(self):
+    def update_control_buttons_visibility(self):
+        self.skip_button.pack_forget()
+        self.repeat_button.pack_forget()
+        
         if self.mode == "break":
             self.skip_button.pack(side=tk.LEFT, padx=2)
-        else:
-            self.skip_button.pack_forget()
+        elif self.mode == "work" and not self.is_running:
+            self.repeat_button.pack(side=tk.LEFT, padx=2)
 
     def enable_settings_button(self):
         self.settings_button.config(state=tk.NORMAL, image=self.icon_settings)
@@ -821,7 +871,9 @@ class GodModeApp:
         """오늘의 집중 횟수를 로그에서 다시 읽어옵니다."""
         daily_stats = parse_logs()
         today_str = datetime.now().strftime("%Y-%m-%d")
-        self.today_count = daily_stats.get(today_str, {'count': 0})['count']
+        stats = daily_stats.get(today_str, {'count': 0, 'duration': 0})
+        self.today_count = stats['count']
+        self.today_duration = stats.get('duration', 0)
 
     def restore_default_settings(self):
         self.setting_always_on_top = True
@@ -861,15 +913,15 @@ class GodModeApp:
             pass
 
     def on_closing(self):
-        if self.is_running and self.mode == "work" and self.setting_strict_mode:
-            messagebox.showwarning("엄격 모드", "집중 중에는 종료할 수 없습니다!")
+        if self.is_running and self.mode == "work":
+            show_toast("집중 모드", "집중 중에는 종료할 수 없습니다!")
             return
         self.show_exit_popup()
 
     def show_exit_popup(self):
         popup = tk.Toplevel(self.root)
         popup.title("종료")
-        popup.geometry("280x140")
+        popup.geometry("320x160")
         popup.resizable(False, False)
         popup.configure(bg=self.colors["bg"])
         popup.transient(self.root)
@@ -877,8 +929,8 @@ class GodModeApp:
         popup.focus_set()
         
         # 화면 중앙 배치
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 140
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 70
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 160
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 80
         popup.geometry(f"+{x}+{y}")
 
         tk.Label(popup, text="정말 종료하시겠습니까?", font=("Helvetica", 11), bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=(30, 20))
@@ -993,6 +1045,7 @@ class GodModeApp:
         self.settings_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         self.stats_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         self.skip_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
+        self.repeat_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         
         if hasattr(self, 'task_frame'):
             self.task_frame.configure(bg=self.colors["bg"])
@@ -1007,15 +1060,24 @@ class GodModeApp:
         self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
         self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"])
         self.icon_skip = self.create_button_icon("skip", self.colors["icon_color"])
+        self.icon_repeat = self.create_button_icon("repeat", self.colors["icon_color"])
         
         self.settings_button.config(image=self.icon_settings)
         self.stats_button.config(image=self.icon_stats)
         self.skip_button.config(image=self.icon_skip)
+        self.repeat_button.config(image=self.icon_repeat)
         self.update_start_button_color()
         
         self.draw_timer()
 
 if __name__ == "__main__":
+    # High DPI 설정 (해상도에 따른 UI 잘림 방지)
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        pass
+
     root = tk.Tk()
     app = GodModeApp(root)
     root.mainloop()
