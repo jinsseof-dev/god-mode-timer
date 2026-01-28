@@ -19,7 +19,9 @@ from datetime import datetime
 class GodModeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("God-Mode Timer")
+        # 초기 로컬라이제이션 (시스템 언어 감지)
+        self.loc = Localization()
+        self.root.title(self.loc.get("app_title"))
 
         # --- 상태 변수 및 설정 로드 (UI 스케일 계산 전 선행) ---
         self.load_env()
@@ -37,7 +39,7 @@ class GodModeApp:
         self.setting_opacity = 1.0
         self.setting_ui_scale = 100 # 사용자 UI 크기 설정 (%)
         self.setting_theme = "Light"
-        self.setting_language = "ko" # 기본 언어
+        self.setting_language = self.loc.lang_code # 기본 언어 (시스템 언어)
         self.is_mini_mode = False
         
         self.window_x = None
@@ -54,11 +56,10 @@ class GodModeApp:
 
         self.load_settings()
         
-        # 다국어 모듈 초기화
-        self.loc = Localization(self.setting_language)
-        
-        # 초기 타이틀 설정 (다국어 적용)
-        self.root.title(self.loc.get("app_title"))
+        # 설정된 언어가 감지된 언어와 다르면 다시 로드
+        if self.setting_language != self.loc.lang_code:
+            self.loc.load_language(self.setting_language)
+            self.root.title(self.loc.get("app_title"))
         
         # 화면 해상도에 비례하여 초기 크기 설정 (FHD 기준)
         self.update_scale_factor()
@@ -913,7 +914,7 @@ class GodModeApp:
                 self.setting_opacity = data.get("opacity", 1.0)
                 self.setting_ui_scale = data.get("ui_scale", 100)
                 self.setting_theme = data.get("theme", "Light")
-                self.setting_language = data.get("language", "ko")
+                self.setting_language = data.get("language", self.loc.lang_code)
                 self.window_x = data.get("window_x")
                 self.window_y = data.get("window_y")
                 self.settings_window_x = data.get("settings_window_x")
@@ -947,7 +948,7 @@ class GodModeApp:
         self.window_x = None
         self.window_y = None
         self.setting_theme = "Light"
-        self.setting_language = "ko"
+        self.setting_language = self.loc.get_system_language()
         self.settings_window_x = None
         self.settings_window_y = None
         self.stats_window_x = None
@@ -996,7 +997,8 @@ class GodModeApp:
         if self.is_running and self.mode == "work":
             show_toast(self.loc.get("focus_mode_title"), self.loc.get("strict_mode_exit_msg"))
             return
-        self.show_exit_popup()
+        self.save_settings_to_file()
+        self.root.destroy()
 
     def show_exit_popup(self):
         popup = tk.Toplevel(self.root)

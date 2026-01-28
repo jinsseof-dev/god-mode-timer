@@ -1,5 +1,5 @@
 {
-    "app_title": "God-Mode Timer",
+    "app_title": "갓생타이머",
     "task_placeholder": "오늘의 갓생 목표는?",
     "mini_mode_title": "미니 모드",
     "mini_mode_msg": "더블 클릭하면 원래대로 돌아옵니다.",
@@ -43,7 +43,15 @@
     "csv_export": "CSV 내보내기",
     "load_more_logs": "더 보기",
     "no_logs_message": "기록된 활동이 없습니다.",
-    "weekdays": ["월", "화", "수", "목", "금", "토", "일"],
+    "weekdays": [
+        "월",
+        "화",
+        "수",
+        "목",
+        "금",
+        "토",
+        "일"
+    ],
     "date_header_fmt": "{icon} {date} ({weekday}) - {count}회 ({time})",
     "settings_window_title": "설정",
     "version_fmt": "Version {version}",
@@ -96,5 +104,16 @@
     "stats_hourly": "시간대별",
     "no_data": "데이터 없음",
     "confirm_delete_title": "삭제 확인",
-    "confirm_delete_msg": "이 로그를 삭제하시겠습니까?"
+    "confirm_delete_msg": "이 로그를 삭제하시겠습니까?",
+    "clear_data_btn": "데이터 초기화",
+    "clear_data_title": "데이터 초기화",
+    "confirm_clear_data_msg": "정말로 모든 기록을 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.",
+    "delete_all": "모두 삭제",
+    "clear_data_success_title": "데이터 삭제 완료",
+    "clear_data_success_msg": "모든 로그가 삭제되었습니다.",
+    "clear_data_fail_msg": "데이터 삭제에 실패했습니다.",
+    "import_csv_btn": "데이터 가져오기",
+    "import_csv_title": "데이터 가져오기 (CSV)",
+    "import_success_msg": "데이터 복원이 완료되었습니다.\n(성공: {success}건, 중복/건너뜀: {skipped}건)",
+    "import_fail_fmt": "데이터 복원에 실패했습니다:\n{error}"
 }

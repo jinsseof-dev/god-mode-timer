@@ -17,6 +17,8 @@ class Localization:
                 return 'ko'
             if lang and lang.startswith('ja'):
                 return 'ja'
+            if lang and lang.startswith('zh'):
+                return 'zh'
         except (ValueError, TypeError):
             pass
         return 'en'
@@ -51,7 +53,8 @@ class Localization:
 
     def get(self, key, **kwargs):
         """키에 해당하는 번역 텍스트를 반환합니다. 없으면 키 자체를 반환."""
-        text = self.translations.get(key, key)
+        default_val = kwargs.pop('default', key)
+        text = self.translations.get(key, default_val)
         if kwargs:
             return text.format(**kwargs)
         return text

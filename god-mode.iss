@@ -33,8 +33,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 
 [Messages]
-korean.SetupAppTitle=갓생 타이머 설치
-korean.SetupWindowTitle=갓생 타이머 설치
+korean.SetupAppTitle=갓생타이머 설치
+korean.SetupWindowTitle=갓생타이머 설치
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked

@@ -1,5 +1,5 @@
 {
-    "app_title": "God-Mode Timer",
+    "app_title": "ゴッドモードタイマー",
     "task_placeholder": "今日の目標は？",
     "mini_mode_title": "ミニモード",
     "mini_mode_msg": "ダブルクリックで元に戻ります。",
@@ -43,7 +43,15 @@
     "csv_export": "CSVエクスポート",
     "load_more_logs": "もっと見る",
     "no_logs_message": "記録された活動がありません。",
-    "weekdays": ["月", "火", "水", "木", "金", "土", "日"],
+    "weekdays": [
+        "月",
+        "火",
+        "水",
+        "木",
+        "金",
+        "土",
+        "日"
+    ],
     "date_header_fmt": "{icon} {date} ({weekday}) - {count}回 ({time})",
     "settings_window_title": "設定",
     "version_fmt": "Version {version}",
@@ -96,5 +104,16 @@
     "stats_hourly": "時間帯別",
     "no_data": "データなし",
     "confirm_delete_title": "削除確認",
-    "confirm_delete_msg": "このログを削除しますか？"
+    "confirm_delete_msg": "このログを削除しますか？",
+    "clear_data_btn": "データ初期化",
+    "clear_data_title": "データ初期化",
+    "confirm_clear_data_msg": "本当にすべての記録を削除しますか？\n削除されたデータは復元できません。",
+    "delete_all": "すべて削除",
+    "clear_data_success_title": "データ削除完了",
+    "clear_data_success_msg": "すべてのログが削除されました。",
+    "clear_data_fail_msg": "データの削除に失敗しました。",
+    "import_csv_btn": "データ読み込み",
+    "import_csv_title": "データ読み込み (CSV)",
+    "import_success_msg": "データの復元が完了しました。\n(成功: {success}件, 重複/スキップ: {skipped}件)",
+    "import_fail_fmt": "データの復元に失敗しました:\n{error}"
 }

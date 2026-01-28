@@ -43,7 +43,15 @@
     "csv_export": "Export CSV",
     "load_more_logs": "Load More",
     "no_logs_message": "No activity recorded.",
-    "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "weekdays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+    ],
     "date_header_fmt": "{icon} {date} ({weekday}) - {count} times ({time})",
     "settings_window_title": "Settings",
     "version_fmt": "Version {version}",
@@ -96,5 +104,16 @@
     "stats_hourly": "Hourly",
     "no_data": "No Data",
     "confirm_delete_title": "Confirm Delete",
-    "confirm_delete_msg": "Are you sure you want to delete this log?"
+    "confirm_delete_msg": "Are you sure you want to delete this log?",
+    "clear_data_btn": "Reset Data",
+    "clear_data_title": "Reset Data",
+    "confirm_clear_data_msg": "Are you sure you want to delete all logs?\nThis cannot be undone.",
+    "delete_all": "Delete All",
+    "clear_data_success_title": "Data Cleared",
+    "clear_data_success_msg": "All logs have been deleted.",
+    "clear_data_fail_msg": "Failed to clear data.",
+    "import_csv_btn": "Import Data",
+    "import_csv_title": "Import Data (CSV)",
+    "import_success_msg": "Data restore completed.\n(Success: {success}, Skipped: {skipped})",
+    "import_fail_fmt": "Failed to restore data:\n{error}"
 }

@@ -2,7 +2,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 import math
 from datetime import datetime, timedelta
-from utils import export_csv, get_recent_logs, get_side_position, parse_logs, delete_log, update_log
+from utils import export_csv, get_recent_logs, get_side_position, parse_logs, delete_log, update_log, get_task_stats
 import traceback
 
 def open_stats_window(app):
@@ -108,24 +108,8 @@ def open_stats_window(app):
                     counts.append(c)
                     if c > max_count: max_count = c
             elif graph_mode.get() == "tasks":
-                # 작업별 분포 (현재 로드된 로그 기준)
-                dist = {}
-                total_dur = 0
-                
-                target_logs = logs
-                if selected_date_filter:
-                    target_logs = [l for l in logs if l['start'].strftime("%m/%d") == selected_date_filter]
-                
-                for log in target_logs:
-                    t = log.get('task', '-')
-                    d = log.get('duration', 0)
-                    dist[t] = dist.get(t, 0) + d
-                    total_dur += d
-                
-                if total_dur > 0:
-                    sorted_tasks = sorted(dist.items(), key=lambda x: x[1], reverse=True)
-                    for t, d in sorted_tasks:
-                        task_stats.append((t, d, (d/total_dur)*100))
+                # 작업별 분포 (DB 집계 사용)
+                task_stats = get_task_stats(current_view_days, selected_date_filter)
             elif graph_mode.get() == "hourly":
                 # 시간대별 분포 (0시 ~ 23시)
                 hours = [0] * 24
@@ -401,15 +385,19 @@ def open_stats_window(app):
         # 펼쳐진 날짜 저장 (가장 최근 날짜만 기본적으로 펼침)
         expanded_dates = set()
         if logs:
-            most_recent_date = logs[0]['start'].strftime("%m/%d")
+            most_recent_date = logs[0]['start'].strftime("%Y-%m-%d")
             expanded_dates.add(most_recent_date)
 
         def toggle_date(date_key):
-            nonlocal selected_date_filter
+            # 접기/펼치기만 수행
             if date_key in expanded_dates:
                 expanded_dates.remove(date_key)
             else:
                 expanded_dates.add(date_key)
+            draw_logs()
+
+        def show_date_stats(date_key):
+            nonlocal selected_date_filter
             
             # 해당 날짜로 그래프 필터링 및 모드 전환
             selected_date_filter = date_key
@@ -417,7 +405,10 @@ def open_stats_window(app):
             prepare_graph_data()
             draw_graph()
             
-            draw_logs()
+            # 날짜 클릭 시 해당 날짜의 로그 목록도 펼쳐줌
+            if date_key not in expanded_dates:
+                expanded_dates.add(date_key)
+                draw_logs()
             
         def delete_log_item(timestamp_str):
             if tk.messagebox.askyesno(app.loc.get("confirm_delete_title", default="Delete"), 
@@ -508,45 +499,64 @@ def open_stats_window(app):
                     log_canvas.create_text(canvas_width/2, int(30 * sf), text=app.loc.get("no_logs_message"), fill=app.colors["fg_sub"], font=("Helvetica", int(8 * sf)))
                     return
 
-                current_date_str = None
+                current_date_key = None
                 weekdays = app.loc.get("weekdays")
 
                 for log in logs:
-                    date_str = log['start'].strftime("%m/%d")
+                    date_disp = log['start'].strftime("%m/%d")
+                    date_key = log['start'].strftime("%Y-%m-%d")
                     
                     # 날짜 헤더 표시 (날짜가 바뀔 때마다)
-                    if date_str != current_date_str:
-                        if current_date_str is not None:
+                    if date_key != current_date_key:
+                        if current_date_key is not None:
                             y_offset += int(10 * sf) # 날짜 그룹 간 간격
                         
-                        current_date_str = date_str
+                        current_date_key = date_key
                         weekday = weekdays[log['start'].weekday()]
                         
-                        date_key = log['start'].strftime("%Y-%m-%d")
                         day_stats = daily_stats.get(date_key, {'count': 0, 'duration': 0})
                         day_count = day_stats['count']
                         day_duration = day_stats['duration']
                         
                         time_str = get_time_str(day_duration)
                         
-                        is_expanded = date_str in expanded_dates
+                        is_expanded = date_key in expanded_dates
                         icon = "▼" if is_expanded else "▶"
-                        header_text = app.loc.get("date_header_fmt", icon=icon, date=date_str, weekday=weekday, count=day_count, time=time_str)
+                        # 아이콘과 텍스트 분리 (화살표만 클릭 가능하게 하기 위함)
+                        text_part = app.loc.get("date_header_fmt", icon="", date=date_disp, weekday=weekday, count=day_count, time=time_str).strip()
                         
-                        # 헤더 배경 및 텍스트
+                        # 헤더 배경
                         header_height = int(26 * sf)
                         bg_id = log_canvas.create_rectangle(int(2 * sf), y_offset, canvas_width-int(5 * sf), y_offset + header_height, 
                                                     fill=app.colors["btn_bg"], outline="")
-                        header_id = log_canvas.create_text(int(8 * sf), y_offset + header_height/2, text=header_text, anchor="w", font=("Helvetica", int(9 * sf), "bold"), fill=app.colors["fg"])
                         
-                        for item_id in [bg_id, header_id]:
-                            log_canvas.tag_bind(item_id, "<Button-1>", lambda e, d=date_str: toggle_date(d))
+                        # 아이콘 (화살표)
+                        icon_x = int(8 * sf)
+                        icon_y = y_offset + header_height/2
+                        icon_id = log_canvas.create_text(icon_x, icon_y, text=icon, anchor="w", font=("Helvetica", int(9 * sf), "bold"), fill=app.colors["fg"])
+                        
+                        # 텍스트 (날짜 정보)
+                        text_x = int(24 * sf)
+                        text_id = log_canvas.create_text(text_x, icon_y, text=text_part, anchor="w", font=("Helvetica", int(9 * sf), "bold"), fill=app.colors["fg"])
+                        
+                        # 클릭 영역 (아이콘 주변)
+                        click_area_w = int(24 * sf)
+                        click_area_id = log_canvas.create_rectangle(int(2 * sf), y_offset, int(2 * sf) + click_area_w, y_offset + header_height, fill="", outline="")
+                        
+                        # 이벤트 바인딩 (아이콘 및 클릭 영역 -> 접기/펼치기)
+                        for item_id in [icon_id, click_area_id]:
+                            log_canvas.tag_bind(item_id, "<Button-1>", lambda e, d=date_key: toggle_date(d))
                             log_canvas.tag_bind(item_id, "<Enter>", lambda e: log_canvas.config(cursor="hand2"))
                             log_canvas.tag_bind(item_id, "<Leave>", lambda e: log_canvas.config(cursor=""))
                         
+                        # 이벤트 바인딩 (날짜 텍스트 -> 파이 차트 보기)
+                        log_canvas.tag_bind(text_id, "<Button-1>", lambda e, d=date_key: show_date_stats(d))
+                        log_canvas.tag_bind(text_id, "<Enter>", lambda e: log_canvas.config(cursor="hand2"))
+                        log_canvas.tag_bind(text_id, "<Leave>", lambda e: log_canvas.config(cursor=""))
+                        
                         y_offset += header_height + int(4 * sf) # 헤더 높이 + 간격
 
-                    if date_str not in expanded_dates:
+                    if date_key not in expanded_dates:
                         continue
 
                     time_range = f"{log['start'].strftime('%H:%M')} ~ {log['end'].strftime('%H:%M')} ({log['duration']}분)"

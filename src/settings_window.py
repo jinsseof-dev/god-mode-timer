@@ -1,5 +1,5 @@
 import tkinter as tk
-from utils import export_csv, get_side_position, show_toast
+from utils import get_side_position, show_toast, clear_all_logs, import_csv
 
 def open_settings_window(app):
     """설정 창을 엽니다."""
@@ -222,7 +222,6 @@ def open_settings_window(app):
             
             save_btn.configure(bg=new_colors["start_btn_bg"], fg=new_colors["btn_fg"])
             restore_btn.configure(bg=new_colors["btn_bg"], fg=new_colors["btn_fg"])
-            export_btn.configure(bg=new_colors["btn_bg"], fg=new_colors["btn_fg"])
             update_radio_style()
 
         app.transition_theme(selected_theme, refresh_ui)
@@ -359,7 +358,7 @@ def open_settings_window(app):
             var_opacity.set(1.0)
             var_ui_scale.set(100)
             var_theme.set("Light")
-            var_lang.set("ko")
+            var_lang.set(app.loc.get_system_language())
             
             # 투명도 즉시 적용 (미리보기)
             on_ui_scale_change(100)
@@ -518,17 +517,68 @@ def open_settings_window(app):
     save_btn.bind("<Enter>", lambda e: save_btn.config(bg=app.colors["start_btn_hover"]))
     save_btn.bind("<Leave>", lambda e: save_btn.config(bg=app.colors["start_btn_bg"]))
 
-    # CSV 내보내기 버튼
-    export_btn = tk.Button(btn_frame, text=app.loc.get("csv_export"), font=("Helvetica", int(9*sf)), bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(10*sf), pady=int(6*sf), command=lambda: export_csv(sw, app.loc))
-    export_btn.pack(side=tk.RIGHT, padx=(int(5*sf), 0))
-    export_btn.bind("<Enter>", lambda e: export_btn.config(bg="#FFE0B2"))
-    export_btn.bind("<Leave>", lambda e: export_btn.config(bg=app.colors["btn_bg"]))
-
     # 기본값 복원 버튼
     restore_btn = tk.Button(btn_frame, text=app.loc.get("restore_defaults_btn"), font=("Helvetica", int(9*sf)), bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(10*sf), pady=int(6*sf), command=restore_defaults)
-    restore_btn.pack(side=tk.RIGHT, padx=(0, 0))
+    restore_btn.pack(side=tk.RIGHT, padx=(int(5*sf), 0))
     restore_btn.bind("<Enter>", lambda e: restore_btn.config(bg="#FFE0B2"))
     restore_btn.bind("<Leave>", lambda e: restore_btn.config(bg=app.colors["btn_bg"]))
+
+    # 데이터 초기화 버튼
+    def clear_data():
+        popup = tk.Toplevel(sw)
+        popup.title(app.loc.get("clear_data_title", default="Reset Data"))
+        w_pop = int(360 * app.scale_factor)
+        h_pop = int(160 * app.scale_factor)
+        popup.geometry(f"{w_pop}x{h_pop}")
+        popup.resizable(False, False)
+        popup.configure(bg=app.colors["bg"])
+        popup.transient(sw)
+        popup.grab_set()
+        popup.focus_set()
+        
+        # 화면 중앙 배치
+        x = sw.winfo_x() + (sw.winfo_width() // 2) - (w_pop // 2)
+        y = sw.winfo_y() + (sw.winfo_height() // 2) - (h_pop // 2)
+        popup.geometry(f"+{x}+{y}")
+
+        container = tk.Frame(popup, bg=app.colors["bg"])
+        container.pack(expand=True)
+
+        tk.Label(container, text=app.loc.get("confirm_clear_data_msg", default="Are you sure you want to delete all logs?\nThis cannot be undone."), 
+                 font=("Helvetica", int(10*sf)), bg=app.colors["bg"], fg=app.colors["fg"], justify="center").pack(pady=(0, int(20*sf)))
+
+        btn_frame_pop = tk.Frame(container, bg=app.colors["bg"])
+        btn_frame_pop.pack()
+
+        def do_clear():
+            if clear_all_logs():
+                show_toast(app.loc.get("clear_data_success_title", default="Data Cleared"), 
+                           app.loc.get("clear_data_success_msg", default="All logs have been deleted."))
+                app.refresh_today_count()
+            else:
+                show_toast(app.loc.get("error"), app.loc.get("clear_data_fail_msg", default="Failed to clear data."))
+            popup.destroy()
+
+        btn_yes = tk.Button(btn_frame_pop, text=app.loc.get("delete_all", default="Delete All"), font=("Helvetica", int(9*sf), "bold"), 
+                            bg=app.colors["stop_btn_bg"], fg="white", bd=0, padx=15, pady=5, command=do_clear)
+        btn_yes.pack(side=tk.LEFT, padx=5)
+        btn_yes.bind("<Enter>", lambda e: btn_yes.config(bg="#D32F2F"))
+        btn_yes.bind("<Leave>", lambda e: btn_yes.config(bg=app.colors["stop_btn_bg"]))
+
+        tk.Button(btn_frame_pop, text=app.loc.get("cancel"), font=("Helvetica", int(9*sf)), bg="#E0E0E0", fg="#555555", bd=0, padx=15, pady=5, command=popup.destroy).pack(side=tk.LEFT, padx=5)
+        
+        popup.bind('<Return>', lambda e: do_clear())
+
+    clear_btn = tk.Button(btn_frame, text=app.loc.get("clear_data_btn", default="Reset Data"), font=("Helvetica", int(9*sf)), bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(10*sf), pady=int(6*sf), command=clear_data)
+    clear_btn.pack(side=tk.RIGHT, padx=(0, 0))
+    clear_btn.bind("<Enter>", lambda e: clear_btn.config(bg="#FFCDD2"))
+    clear_btn.bind("<Leave>", lambda e: clear_btn.config(bg=app.colors["btn_bg"]))
+
+    # CSV 가져오기 버튼
+    import_btn = tk.Button(btn_frame, text=app.loc.get("import_csv_btn", default="Import CSV"), font=("Helvetica", int(9*sf)), bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(10*sf), pady=int(6*sf), command=lambda: import_csv(sw, app.loc))
+    import_btn.pack(side=tk.RIGHT, padx=(0, int(5*sf)))
+    import_btn.bind("<Enter>", lambda e: import_btn.config(bg=app.colors["btn_hover"]))
+    import_btn.bind("<Leave>", lambda e: import_btn.config(bg=app.colors["btn_bg"]))
 
     # 버전 레이블 배치
     version_label.pack(side=tk.LEFT, padx=(int(5*sf), 0))

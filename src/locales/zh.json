@@ -1,5 +1,5 @@
 {
-    "app_title": "God-Mode Timer",
+    "app_title": "上帝模式计时器",
     "task_placeholder": "今天的目标是什么？",
     "mini_mode_title": "迷你模式",
     "mini_mode_msg": "双击即可返回正常模式。",
@@ -43,7 +43,15 @@
     "csv_export": "导出 CSV",
     "load_more_logs": "加载更多",
     "no_logs_message": "没有记录的活动。",
-    "weekdays": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
+    "weekdays": [
+        "周一",
+        "周二",
+        "周三",
+        "周四",
+        "周五",
+        "周六",
+        "周日"
+    ],
     "date_header_fmt": "{icon} {date} ({weekday}) - {count} 次 ({time})",
     "settings_window_title": "设置",
     "version_fmt": "版本 {version}",
@@ -96,5 +104,16 @@
     "stats_hourly": "每小时",
     "no_data": "无数据",
     "confirm_delete_title": "确认删除",
-    "confirm_delete_msg": "确定要删除此日志吗？"
+    "confirm_delete_msg": "确定要删除此日志吗？",
+    "clear_data_btn": "重置数据",
+    "clear_data_title": "重置数据",
+    "confirm_clear_data_msg": "确定要删除所有记录吗？\n此操作无法撤销。",
+    "delete_all": "全部删除",
+    "clear_data_success_title": "数据已清除",
+    "clear_data_success_msg": "所有日志已被删除。",
+    "clear_data_fail_msg": "数据清除失败。",
+    "import_csv_btn": "导入数据",
+    "import_csv_title": "导入数据 (CSV)",
+    "import_success_msg": "数据恢复完成。\n(成功: {success}, 跳过: {skipped})",
+    "import_fail_fmt": "数据恢复失败:\n{error}"
 }
