@@ -5,7 +5,7 @@ def open_settings_window(app):
     """설정 창을 엽니다."""
     sf = app.scale_factor
     sw = tk.Toplevel(app.root)
-    sw.title("설정")
+    sw.title(app.loc.get("settings_window_title"))
     w = int(640 * sf)
     h = int(420 * sf)
     sw.geometry(f"{w}x{h}")
@@ -39,14 +39,15 @@ def open_settings_window(app):
         "show_task_input": app.setting_show_task_input,
         "opacity": app.setting_opacity,
         "ui_scale": app.setting_ui_scale,
-        "theme": app.setting_theme
+        "theme": app.setting_theme,
+        "language": app.setting_language
     }
 
     # 하단 버튼 영역 (레이아웃 순서 보장을 위해 먼저 배치)
     btn_frame = tk.Frame(sw, bg=bg_color)
 
     # 버전 정보 표시 (테마 업데이트 함수보다 먼저 정의해야 함)
-    version_label = tk.Label(btn_frame, text=f"Version {app.app_version}", font=("Helvetica", int(8*sf)), bg=bg_color, fg=app.colors["fg_sub"])
+    version_label = tk.Label(btn_frame, text=app.loc.get("version_fmt", version=app.app_version), font=("Helvetica", int(8*sf)), bg=bg_color, fg=app.colors["fg_sub"])
 
     btn_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=int(20*sf), pady=int(20*sf))
 
@@ -62,7 +63,7 @@ def open_settings_window(app):
     right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(int(10*sf), 0))
 
     # 1. 타이머 설정 그룹 (왼쪽 상단)
-    grp_timer = tk.LabelFrame(left_col, text="타이머 설정", font=group_font, bg=bg_color, fg=fg_color, bd=1, relief="groove")
+    grp_timer = tk.LabelFrame(left_col, text=app.loc.get("timer_settings_group"), font=group_font, bg=bg_color, fg=fg_color, bd=1, relief="groove")
     grp_timer.pack(fill=tk.X, pady=(0, int(15*sf)), ipady=int(5*sf))
 
     def create_row(parent, label_text, default_val, row):
@@ -73,13 +74,13 @@ def open_settings_window(app):
         parent.grid_columnconfigure(1, weight=1)
         return var
 
-    var_work = create_row(grp_timer, "집중 시간 (분)", app.setting_work_min, 0)
-    var_short = create_row(grp_timer, "짧은 휴식 (분)", app.setting_short_break_min, 1)
-    var_long = create_row(grp_timer, "긴 휴식 (분)", app.setting_long_break_min, 2)
-    var_interval = create_row(grp_timer, "긴 휴식 간격 (회)", app.setting_long_break_interval, 3)
+    var_work = create_row(grp_timer, app.loc.get("work_time_min"), app.setting_work_min, 0)
+    var_short = create_row(grp_timer, app.loc.get("short_break_min"), app.setting_short_break_min, 1)
+    var_long = create_row(grp_timer, app.loc.get("long_break_min"), app.setting_long_break_min, 2)
+    var_interval = create_row(grp_timer, app.loc.get("long_break_interval_count"), app.setting_long_break_interval, 3)
 
     # 2. 동작 설정 그룹 (왼쪽 하단)
-    grp_behavior = tk.LabelFrame(left_col, text="동작 설정", font=group_font, bg=bg_color, fg=fg_color, bd=1, relief="groove")
+    grp_behavior = tk.LabelFrame(left_col, text=app.loc.get("behavior_settings_group"), font=group_font, bg=bg_color, fg=fg_color, bd=1, relief="groove")
     grp_behavior.pack(fill=tk.X, pady=(0, 0), ipady=int(5*sf))
 
     def create_chk(parent, text, var):
@@ -90,20 +91,62 @@ def open_settings_window(app):
         return chk
 
     var_auto = tk.BooleanVar(value=app.setting_auto_start)
-    create_chk(grp_behavior, "타이머 자동 시작", var_auto)
+    create_chk(grp_behavior, app.loc.get("auto_start_timer"), var_auto)
 
     var_sound = tk.BooleanVar(value=app.setting_sound)
-    create_chk(grp_behavior, "알림음 켜기", var_sound)
+    create_chk(grp_behavior, app.loc.get("enable_sound"), var_sound)
 
     var_strict = tk.BooleanVar(value=app.setting_strict_mode)
-    create_chk(grp_behavior, "엄격 모드 (중도 포기 불가)", var_strict)
+    create_chk(grp_behavior, app.loc.get("strict_mode_desc"), var_strict)
 
     # 3. 화면 설정 그룹 (오른쪽 전체)
-    grp_display = tk.LabelFrame(right_col, text="화면 설정", font=group_font, bg=bg_color, fg=fg_color, bd=1, relief="groove")
+    grp_display = tk.LabelFrame(right_col, text=app.loc.get("display_settings_group"), font=group_font, bg=bg_color, fg=fg_color, bd=1, relief="groove")
     grp_display.pack(fill=tk.BOTH, expand=True, pady=(0, 0), ipady=int(5*sf))
 
+    # 언어 선택 (Language)
+    tk.Label(grp_display, text=app.loc.get("language_label"), font=lbl_font, bg=bg_color, fg=fg_color).pack(anchor="w", padx=int(15*sf), pady=(int(5*sf), 0))
+    
+    lang_frame = tk.Frame(grp_display, bg=bg_color)
+    lang_frame.pack(fill=tk.X, padx=int(15*sf), pady=(0, int(5*sf)))
+    
+    var_lang = tk.StringVar(value=app.setting_language)
+    
+    btn_ko = tk.Button(lang_frame, text=app.loc.get("lang_ko"), font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
+    btn_ko.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, int(2*sf)))
+    
+    btn_en = tk.Button(lang_frame, text=app.loc.get("lang_en"), font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
+    btn_en.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(int(3*sf), int(3*sf)))
+
+    btn_ja = tk.Button(lang_frame, text=app.loc.get("lang_ja"), font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
+    btn_ja.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(int(2*sf), 0))
+
+    def update_lang_radio_style():
+        val = var_lang.get()
+        # 모든 버튼을 기본 스타일로 초기화
+        btn_ko.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
+        btn_en.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
+        btn_ja.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
+        
+        # 선택된 버튼만 활성 스타일로 변경
+        if val == "ko":
+            btn_ko.configure(bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"])
+        elif val == "en":
+            btn_en.configure(bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"])
+        elif val == "ja":
+            btn_ja.configure(bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"])
+            
+    update_lang_radio_style()
+    
+    def set_lang(val):
+        var_lang.set(val)
+        update_lang_radio_style()
+        
+    btn_ko.configure(command=lambda: set_lang("ko"))
+    btn_en.configure(command=lambda: set_lang("en"))
+    btn_ja.configure(command=lambda: set_lang("ja"))
+
     # 테마 선택
-    tk.Label(grp_display, text="테마", font=lbl_font, bg=bg_color, fg=fg_color).pack(anchor="w", padx=int(15*sf), pady=(int(5*sf), 0))
+    tk.Label(grp_display, text=app.loc.get("theme_label"), font=lbl_font, bg=bg_color, fg=fg_color).pack(anchor="w", padx=int(15*sf), pady=(int(5*sf), 0))
     
     theme_frame = tk.Frame(grp_display, bg=bg_color)
     theme_frame.pack(fill=tk.X, padx=int(15*sf), pady=(0, int(5*sf)))
@@ -111,10 +154,10 @@ def open_settings_window(app):
     var_theme = tk.StringVar(value=app.setting_theme)
     
     # 테마 선택 버튼 (커스텀 라디오 버튼)
-    btn_light = tk.Button(theme_frame, text="☀️ 라이트", font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
+    btn_light = tk.Button(theme_frame, text=app.loc.get("theme_light"), font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
     btn_light.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, int(5*sf)))
     
-    btn_dark = tk.Button(theme_frame, text="🌙 다크", font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
+    btn_dark = tk.Button(theme_frame, text=app.loc.get("theme_dark"), font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
     btn_dark.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(int(5*sf), 0))
 
     def update_radio_style():
@@ -185,16 +228,16 @@ def open_settings_window(app):
     btn_dark.configure(command=lambda: set_theme("Dark"))
 
     var_top = tk.BooleanVar(value=app.setting_always_on_top)
-    create_chk(grp_display, "항상 위에 표시", var_top)
+    create_chk(grp_display, app.loc.get("always_on_top"), var_top)
 
     var_task_input = tk.BooleanVar(value=app.setting_show_task_input)
-    create_chk(grp_display, "할 일 입력창 표시", var_task_input)
+    create_chk(grp_display, app.loc.get("show_task_input"), var_task_input)
     
     # 투명도 조절 프레임 (슬라이더 + 수치 표시)
     frame_opacity = tk.Frame(grp_display, bg=bg_color)
     frame_opacity.pack(fill=tk.X, padx=int(15*sf), pady=int(5*sf))
     
-    tk.Label(frame_opacity, text="투명도", font=lbl_font, bg=bg_color, fg=fg_color).pack(side=tk.LEFT)
+    tk.Label(frame_opacity, text=app.loc.get("opacity_label"), font=lbl_font, bg=bg_color, fg=fg_color).pack(side=tk.LEFT)
     
     var_opacity = tk.DoubleVar(value=app.setting_opacity)
     lbl_opacity_val = tk.Label(frame_opacity, text=f"{int(app.setting_opacity * 100)}%", font=("Helvetica", int(8*sf)), bg=bg_color, fg=fg_color, width=4)
@@ -223,7 +266,7 @@ def open_settings_window(app):
     frame_ui_scale = tk.Frame(grp_display, bg=bg_color)
     frame_ui_scale.pack(fill=tk.X, padx=int(15*sf), pady=int(5*sf))
     
-    tk.Label(frame_ui_scale, text="UI 크기", font=lbl_font, bg=bg_color, fg=fg_color).pack(side=tk.LEFT)
+    tk.Label(frame_ui_scale, text=app.loc.get("ui_scale_label"), font=lbl_font, bg=bg_color, fg=fg_color).pack(side=tk.LEFT)
     
     var_ui_scale = tk.IntVar(value=app.setting_ui_scale)
     lbl_ui_scale_val = tk.Label(frame_ui_scale, text=f"{app.setting_ui_scale}%", font=("Helvetica", int(8*sf)), bg=bg_color, fg=fg_color, width=4)
@@ -250,7 +293,7 @@ def open_settings_window(app):
                 if isinstance(w, (tk.Label, tk.Button, tk.Checkbutton, tk.Radiobutton, tk.Spinbox)):
                     if w is version_label or w is lbl_opacity_val or w is lbl_ui_scale_val:
                         w.configure(font=new_small_font)
-                    elif isinstance(w, tk.Button) and w['text'] == "저장":
+                    elif isinstance(w, tk.Button) and w['text'] == app.loc.get("save_btn"):
                          w.configure(font=("Helvetica", int(9 * new_sf), "bold"))
                     else:
                         w.configure(font=new_lbl_font)
@@ -272,7 +315,7 @@ def open_settings_window(app):
     
     def restore_defaults():
         popup = tk.Toplevel(sw)
-        popup.title("기본값 복원")
+        popup.title(app.loc.get("restore_defaults_title"))
         w_pop = int(360 * app.scale_factor)
         h_pop = int(160 * app.scale_factor)
         popup.geometry(f"{w_pop}x{h_pop}")
@@ -290,7 +333,7 @@ def open_settings_window(app):
         container = tk.Frame(popup, bg=app.colors["bg"])
         container.pack(expand=True)
 
-        tk.Label(container, text="모든 설정을 기본값으로\n되돌리시겠습니까?", font=("Helvetica", int(10*sf)), bg=app.colors["bg"], fg=app.colors["fg"]).pack(pady=(0, int(20*sf)))
+        tk.Label(container, text=app.loc.get("restore_defaults_msg"), font=("Helvetica", int(10*sf)), bg=app.colors["bg"], fg=app.colors["fg"]).pack(pady=(0, int(20*sf)))
 
         btn_frame = tk.Frame(container, bg=app.colors["bg"])
         btn_frame.pack()
@@ -309,20 +352,22 @@ def open_settings_window(app):
             var_opacity.set(1.0)
             var_ui_scale.set(100)
             var_theme.set("Light")
+            var_lang.set("ko")
             
             # 투명도 즉시 적용 (미리보기)
             on_ui_scale_change(100)
             on_opacity_change(1.0)
             update_theme_preview()
+            update_lang_radio_style()
             
-            show_toast("설정 초기화", "설정이 초기화되었습니다")
+            show_toast(app.loc.get("reset_settings_title"), app.loc.get("reset_settings_msg"))
 
-        btn_yes = tk.Button(btn_frame, text="복원", font=("Helvetica", int(9*sf), "bold"), bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=15, pady=5, command=do_restore)
+        btn_yes = tk.Button(btn_frame, text=app.loc.get("restore_btn"), font=("Helvetica", int(9*sf), "bold"), bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=15, pady=5, command=do_restore)
         btn_yes.pack(side=tk.LEFT, padx=5)
         btn_yes.bind("<Enter>", lambda e: btn_yes.config(bg=app.colors["start_btn_hover"]))
         btn_yes.bind("<Leave>", lambda e: btn_yes.config(bg=app.colors["start_btn_bg"]))
 
-        tk.Button(btn_frame, text="취소", font=("Helvetica", int(9*sf)), bg="#E0E0E0", fg="#555555", bd=0, padx=15, pady=5, command=popup.destroy).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text=app.loc.get("cancel"), font=("Helvetica", int(9*sf)), bg="#E0E0E0", fg="#555555", bd=0, padx=15, pady=5, command=popup.destroy).pack(side=tk.LEFT, padx=5)
         
         popup.bind('<Return>', lambda e: do_restore())
 
@@ -338,7 +383,8 @@ def open_settings_window(app):
                 var_task_input.get() != initial_settings["show_task_input"] or
                 abs(var_opacity.get() - initial_settings["opacity"]) > 0.001 or
                 var_ui_scale.get() != initial_settings["ui_scale"] or
-                var_theme.get() != initial_settings["theme"])
+                var_theme.get() != initial_settings["theme"] or
+                var_lang.get() != initial_settings["language"])
 
     def close_without_saving():
         # 저장하지 않고 닫을 때, 투명도 미리보기 복구
@@ -363,7 +409,7 @@ def open_settings_window(app):
 
     def show_save_popup():
         popup = tk.Toplevel(sw)
-        popup.title("설정 저장")
+        popup.title(app.loc.get("save_settings_title"))
         w_pop = int(360 * app.scale_factor)
         h_pop = int(160 * app.scale_factor)
         popup.geometry(f"{w_pop}x{h_pop}")
@@ -381,7 +427,7 @@ def open_settings_window(app):
         container = tk.Frame(popup, bg=app.colors["bg"])
         container.pack(expand=True)
 
-        tk.Label(container, text="변경된 내용이 있습니다.\n저장하시겠습니까?", font=("Helvetica", int(10*sf)), bg=app.colors["bg"], fg=app.colors["fg"]).pack(pady=(0, int(20*sf)))
+        tk.Label(container, text=app.loc.get("save_changes_msg"), font=("Helvetica", int(10*sf)), bg=app.colors["bg"], fg=app.colors["fg"]).pack(pady=(0, int(20*sf)))
 
         btn_frame = tk.Frame(container, bg=app.colors["bg"])
         btn_frame.pack()
@@ -395,17 +441,17 @@ def open_settings_window(app):
             close_without_saving()
 
         # 버튼 생성 (저장, 저장 안 함, 취소)
-        btn_save = tk.Button(btn_frame, text="저장", font=("Helvetica", int(9*sf), "bold"), bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(15*sf), pady=int(5*sf), command=do_save)
+        btn_save = tk.Button(btn_frame, text=app.loc.get("save_btn"), font=("Helvetica", int(9*sf), "bold"), bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(15*sf), pady=int(5*sf), command=do_save)
         btn_save.pack(side=tk.LEFT, padx=int(5*sf))
         btn_save.bind("<Enter>", lambda e: btn_save.config(bg=app.colors["start_btn_hover"]))
         btn_save.bind("<Leave>", lambda e: btn_save.config(bg=app.colors["start_btn_bg"]))
 
-        btn_no = tk.Button(btn_frame, text="저장 안 함", font=("Helvetica", int(9*sf)), bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(15*sf), pady=int(5*sf), command=do_dont_save)
+        btn_no = tk.Button(btn_frame, text=app.loc.get("dont_save_btn"), font=("Helvetica", int(9*sf)), bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(15*sf), pady=int(5*sf), command=do_dont_save)
         btn_no.pack(side=tk.LEFT, padx=int(5*sf))
         btn_no.bind("<Enter>", lambda e: btn_no.config(bg=app.colors["btn_hover"]))
         btn_no.bind("<Leave>", lambda e: btn_no.config(bg=app.colors["btn_bg"]))
 
-        tk.Button(btn_frame, text="취소", font=("Helvetica", int(9*sf)), bg="#E0E0E0", fg="#555555", bd=0, padx=int(15*sf), pady=int(5*sf), command=popup.destroy).pack(side=tk.LEFT, padx=int(5*sf))
+        tk.Button(btn_frame, text=app.loc.get("cancel"), font=("Helvetica", int(9*sf)), bg="#E0E0E0", fg="#555555", bd=0, padx=int(15*sf), pady=int(5*sf), command=popup.destroy).pack(side=tk.LEFT, padx=int(5*sf))
         
         popup.bind('<Return>', lambda e: do_save())
 
@@ -434,6 +480,13 @@ def open_settings_window(app):
         app.setting_ui_scale = var_ui_scale.get()
         app.setting_theme = var_theme.get()
         
+        # 언어 변경 처리 (로직 간소화)
+        new_lang = var_lang.get()
+        lang_changed = app.setting_language != new_lang
+        if lang_changed:
+            app.setting_language = new_lang
+            app.loc.load_language(new_lang)
+        
         app.settings_window_x = sw.winfo_x()
         app.settings_window_y = sw.winfo_y()
 
@@ -445,23 +498,27 @@ def open_settings_window(app):
         app.apply_theme()
 
         app.reset_timer()
-        show_toast("설정 저장", "설정이 저장되었습니다")
+
+        if lang_changed:
+            app.refresh_language()
+
+        show_toast(app.loc.get("save_settings_toast_title"), app.loc.get("save_settings_toast_msg"))
         sw.destroy()
 
     # 저장 버튼 (우측 끝)
-    save_btn = tk.Button(btn_frame, text="저장", font=("Helvetica", int(9*sf), "bold"), bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(15*sf), pady=int(6*sf), command=save_settings)
+    save_btn = tk.Button(btn_frame, text=app.loc.get("save_btn"), font=("Helvetica", int(9*sf), "bold"), bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(15*sf), pady=int(6*sf), command=save_settings)
     save_btn.pack(side=tk.RIGHT, padx=(int(5*sf), 0))
     save_btn.bind("<Enter>", lambda e: save_btn.config(bg=app.colors["start_btn_hover"]))
     save_btn.bind("<Leave>", lambda e: save_btn.config(bg=app.colors["start_btn_bg"]))
 
     # CSV 내보내기 버튼
-    export_btn = tk.Button(btn_frame, text="CSV 내보내기", font=("Helvetica", int(9*sf)), bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(10*sf), pady=int(6*sf), command=lambda: export_csv(sw))
+    export_btn = tk.Button(btn_frame, text=app.loc.get("csv_export"), font=("Helvetica", int(9*sf)), bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(10*sf), pady=int(6*sf), command=lambda: export_csv(sw, app.loc))
     export_btn.pack(side=tk.RIGHT, padx=(int(5*sf), 0))
     export_btn.bind("<Enter>", lambda e: export_btn.config(bg="#FFE0B2"))
     export_btn.bind("<Leave>", lambda e: export_btn.config(bg=app.colors["btn_bg"]))
 
     # 기본값 복원 버튼
-    restore_btn = tk.Button(btn_frame, text="기본값 복원", font=("Helvetica", int(9*sf)), bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(10*sf), pady=int(6*sf), command=restore_defaults)
+    restore_btn = tk.Button(btn_frame, text=app.loc.get("restore_defaults_btn"), font=("Helvetica", int(9*sf)), bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], bd=0, padx=int(10*sf), pady=int(6*sf), command=restore_defaults)
     restore_btn.pack(side=tk.RIGHT, padx=(0, 0))
     restore_btn.bind("<Enter>", lambda e: restore_btn.config(bg="#FFE0B2"))
     restore_btn.bind("<Leave>", lambda e: restore_btn.config(bg=app.colors["btn_bg"]))

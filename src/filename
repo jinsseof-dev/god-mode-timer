@@ -150,7 +150,7 @@ def build():
     locales_src = os.path.join('src', 'locales')
     if os.path.exists(locales_src):
         # Windows에서는 세미콜론(;)으로 구분
-        options.append(f'--add-data={locales_src};locales')
+        options.append(f'--add-data={locales_src}{os.pathsep}locales')
 
     PyInstaller.__main__.run(options)
     

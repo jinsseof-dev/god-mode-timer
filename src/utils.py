@@ -64,18 +64,20 @@ def log_godmode(task_name=None, duration=25, status="success"):
     except Exception as e:
         print(f"\n로그 저장 실패: {e}")
 
-def export_csv(parent):
+def export_csv(parent, loc=None):
     """로그 데이터를 CSV 파일로 내보냅니다."""
     log_path = get_user_data_path("godmode_log.txt")
     if not os.path.exists(log_path):
-        messagebox.showinfo("알림", "기록된 로그가 없습니다.", parent=parent)
+        title = loc.get("notice") if loc else "알림"
+        msg = loc.get("no_log_msg") if loc else "기록된 로그가 없습니다."
+        messagebox.showinfo(title, msg, parent=parent)
         return
 
     file_path = filedialog.asksaveasfilename(
         parent=parent,
         defaultextension=".csv",
         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-        title="CSV로 내보내기",
+        title=loc.get("export_csv_title") if loc else "CSV로 내보내기",
         initialfile=f"godmode_logs_{datetime.now().strftime('%Y%m%d')}.csv"
     )
 
@@ -111,9 +113,13 @@ def export_csv(parent):
                             task = parts[1].split("-", 1)[1].strip()
                         writer.writerow([timestamp, 25, task, "success"])
                     
-        messagebox.showinfo("완료", "CSV 내보내기가 완료되었습니다.", parent=parent)
+        title = loc.get("done") if loc else "완료"
+        msg = loc.get("export_success_msg") if loc else "CSV 내보내기가 완료되었습니다."
+        messagebox.showinfo(title, msg, parent=parent)
     except Exception as e:
-        messagebox.showerror("오류", f"내보내기 실패: {e}", parent=parent)
+        title = loc.get("error") if loc else "오류"
+        msg = loc.get("export_fail_fmt", error=e) if loc else f"내보내기 실패: {e}"
+        messagebox.showerror(title, msg, parent=parent)
 
 def show_toast(title, message):
     """Windows 10/11 알림 센터에 토스트 메시지를 띄웁니다. (WinRT 사용)"""

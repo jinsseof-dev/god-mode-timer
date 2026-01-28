@@ -8,7 +8,7 @@ def open_stats_window(app):
     """통계 창을 엽니다."""
     try:
         sw = tk.Toplevel(app.root)
-        sw.title("갓생 지수 통계")
+        sw.title(app.loc.get("stats_window_title"))
         w = app.stats_window_w if getattr(app, 'stats_window_w', None) else int(740 * app.scale_factor)
         h = app.stats_window_h if getattr(app, 'stats_window_h', None) else int(360 * app.scale_factor)
         sw.geometry(f"{w}x{h}")
@@ -40,7 +40,7 @@ def open_stats_window(app):
         left_frame = tk.Frame(main_frame, bg=app.colors["bg"])
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=(0, 10))
 
-        label_title = tk.Label(left_frame, text="한달간 갓생 지수", font=("Helvetica", int(11*app.scale_factor), "bold"), bg=app.colors["bg"], fg=app.colors["fg"])
+        label_title = tk.Label(left_frame, text=app.loc.get("monthly_stats_title"), font=("Helvetica", int(11*app.scale_factor), "bold"), bg=app.colors["bg"], fg=app.colors["fg"])
         label_title.pack(pady=(0, int(15*app.scale_factor)))
 
         # 캔버스
@@ -102,7 +102,7 @@ def open_stats_window(app):
                     canvas.create_text(x + bar_width/2, base_y + int(15 * sf), text=dates[i], font=("Helvetica", int(7 * sf)), fill=app.colors["fg_sub"])
                 
                 # 툴팁
-                tooltip_text = f"{dates[i]}: {count}갓생"
+                tooltip_text = app.loc.get("tooltip_fmt", date=dates[i], count=count)
                 def on_enter(e, txt=tooltip_text, bx=x, by=base_y - bar_height):
                     canvas.delete("tooltip")
                     canvas.create_text(bx + bar_width/2, by - int(10 * sf), text=txt, font=("Helvetica", int(8 * sf), "bold"), fill=app.colors["fg"], tag="tooltip")
@@ -126,26 +126,32 @@ def open_stats_window(app):
             if d_str in daily_stats:
                 total_30_duration += daily_stats[d_str]['duration']
                 
-        hours, minutes = divmod(total_30_duration, 60)
-        time_str = f"{hours}시간 {minutes}분" if hours > 0 else f"{minutes}분"
+        def get_time_str(duration):
+            hours, minutes = divmod(duration, 60)
+            if hours > 0:
+                return app.loc.get("time_fmt_hm", hours=hours, minutes=minutes)
+            else:
+                return app.loc.get("time_fmt_m", minutes=minutes)
+
+        time_str = get_time_str(total_30_duration)
 
         stats_frame = tk.Frame(left_frame, bg=app.colors["bg"])
         stats_frame.pack(pady=20)
         
-        label_summary = tk.Label(stats_frame, text=f"최근 30일: {total_30_count}갓생 ({time_str})", font=("Helvetica", int(10 * app.scale_factor), "bold"), bg=app.colors["bg"], fg=app.colors["fg"])
+        label_summary = tk.Label(stats_frame, text=app.loc.get("recent_30_days_fmt", count=total_30_count, time=time_str), font=("Helvetica", int(10 * app.scale_factor), "bold"), bg=app.colors["bg"], fg=app.colors["fg"])
         label_summary.pack()
 
         # === 우측: 로그 리스트 ===
         right_frame = tk.Frame(main_frame, bg=app.colors["bg"])
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
         
-        label_log_title = tk.Label(right_frame, text="최근 기록", font=("Helvetica", int(11 * app.scale_factor), "bold"), bg=app.colors["bg"], fg=app.colors["fg"])
+        label_log_title = tk.Label(right_frame, text=app.loc.get("recent_logs_title"), font=("Helvetica", int(11 * app.scale_factor), "bold"), bg=app.colors["bg"], fg=app.colors["fg"])
         label_log_title.pack(pady=(0, int(10 * app.scale_factor)))
 
         # CSV 내보내기 버튼
-        btn_export = tk.Button(right_frame, text="CSV 내보내기", font=("Helvetica", int(8 * app.scale_factor)), 
+        btn_export = tk.Button(right_frame, text=app.loc.get("csv_export"), font=("Helvetica", int(8 * app.scale_factor)), 
                             bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], 
-                            bd=0, padx=10, pady=4, command=lambda: export_csv(sw))
+                            bd=0, padx=10, pady=4, command=lambda: export_csv(sw, app.loc))
         btn_export.pack(side=tk.BOTTOM, pady=(5, 0), fill=tk.X)
         btn_export.bind("<Enter>", lambda e: btn_export.config(bg=app.colors["btn_hover"]))
         btn_export.bind("<Leave>", lambda e: btn_export.config(bg=app.colors["btn_bg"]))
@@ -166,7 +172,7 @@ def open_stats_window(app):
             draw_logs()
 
         # 더 보기 버튼
-        btn_more = tk.Button(right_frame, text="이전 기록 더 보기 (+30일)", font=("Helvetica", int(8 * app.scale_factor)), 
+        btn_more = tk.Button(right_frame, text=app.loc.get("load_more_logs"), font=("Helvetica", int(8 * app.scale_factor)), 
                             bg=app.colors["btn_bg"], fg=app.colors["btn_fg"], 
                             bd=0, padx=10, pady=4, command=load_more_data)
         if has_more:
@@ -218,11 +224,11 @@ def open_stats_window(app):
                 padding = int(4 * sf)
                 
                 if not logs:
-                    log_canvas.create_text(canvas_width/2, int(30 * sf), text="아직 기록된 집중 시간이 없습니다.", fill=app.colors["fg_sub"], font=("Helvetica", int(8 * sf)))
+                    log_canvas.create_text(canvas_width/2, int(30 * sf), text=app.loc.get("no_logs_message"), fill=app.colors["fg_sub"], font=("Helvetica", int(8 * sf)))
                     return
 
                 current_date_str = None
-                weekdays = ["월", "화", "수", "목", "금", "토", "일"]
+                weekdays = app.loc.get("weekdays")
 
                 for log in logs:
                     date_str = log['start'].strftime("%m/%d")
@@ -240,12 +246,11 @@ def open_stats_window(app):
                         day_count = day_stats['count']
                         day_duration = day_stats['duration']
                         
-                        hours, minutes = divmod(day_duration, 60)
-                        time_str = f"{hours}시간 {minutes}분" if hours > 0 else f"{minutes}분"
+                        time_str = get_time_str(day_duration)
                         
                         is_expanded = date_str in expanded_dates
                         icon = "▼" if is_expanded else "▶"
-                        header_text = f"{icon} {date_str} ({weekday})   {day_count}갓생 ({time_str})"
+                        header_text = app.loc.get("date_header_fmt", icon=icon, date=date_str, weekday=weekday, count=day_count, time=time_str)
                         
                         # 헤더 배경 및 텍스트
                         header_height = int(26 * sf)
@@ -340,6 +345,20 @@ def open_stats_window(app):
             draw_logs()
             
         sw.refresh_theme = refresh_theme
+
+        def refresh_language():
+            sw.title(app.loc.get("stats_window_title"))
+            label_title.config(text=app.loc.get("monthly_stats_title"))
+            label_log_title.config(text=app.loc.get("recent_logs_title"))
+            btn_export.config(text=app.loc.get("csv_export"))
+            if btn_more.winfo_exists():
+                btn_more.config(text=app.loc.get("load_more_logs"))
+            
+            t_str = get_time_str(total_30_duration)
+            label_summary.config(text=app.loc.get("recent_30_days_fmt", count=total_30_count, time=t_str))
+            draw_graph()
+            draw_logs()
+        sw.refresh_language = refresh_language
         
         def refresh_internal_ui_scale():
             sf = app.scale_factor
@@ -389,4 +408,4 @@ def open_stats_window(app):
         
     except Exception as e:
         traceback.print_exc()
-        tk.messagebox.showerror("오류", f"통계 창을 여는 중 오류가 발생했습니다:\n{e}")
+        tk.messagebox.showerror(app.loc.get("error"), app.loc.get("stats_error_msg", error=e))
