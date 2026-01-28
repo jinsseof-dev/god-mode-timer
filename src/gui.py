@@ -6,6 +6,7 @@ from common import resource_path, get_user_data_path
 from settings_window import open_settings_window
 from stats_window import open_stats_window
 from ad_window import show_ad_window
+from localization import Localization
 import time
 import math
 import sys
@@ -18,11 +19,13 @@ from datetime import datetime
 class GodModeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("God-Mode Timer")
+        # 초기 로컬라이제이션 (시스템 언어 감지)
+        self.loc = Localization()
+        self.root.title(self.loc.get("app_title"))
 
         # --- 상태 변수 및 설정 로드 (UI 스케일 계산 전 선행) ---
         self.load_env()
-        self.app_version = os.environ.get("VERSION", "v1.20")
+        self.app_version = os.environ.get("VERSION", "v1.21")
         self.is_running = False
         self.setting_always_on_top = True
         self.setting_auto_start = False
@@ -36,6 +39,7 @@ class GodModeApp:
         self.setting_opacity = 1.0
         self.setting_ui_scale = 100 # 사용자 UI 크기 설정 (%)
         self.setting_theme = "Light"
+        self.setting_language = self.loc.lang_code # 기본 언어 (시스템 언어)
         self.is_mini_mode = False
         
         self.window_x = None
@@ -51,6 +55,11 @@ class GodModeApp:
         self.transition_job = None
 
         self.load_settings()
+        
+        # 설정된 언어가 감지된 언어와 다르면 다시 로드
+        if self.setting_language != self.loc.lang_code:
+            self.loc.load_language(self.setting_language)
+            self.root.title(self.loc.get("app_title"))
         
         # 화면 해상도에 비례하여 초기 크기 설정 (FHD 기준)
         self.update_scale_factor()
@@ -145,7 +154,7 @@ class GodModeApp:
         self.task_frame = tk.Frame(root, bg=self.colors["bg"])
         
         self.task_var = tk.StringVar()
-        self.task_placeholder = "지금 할 일 입력..."
+        self.task_placeholder = self.loc.get("task_placeholder")
         
         self.task_entry = tk.Entry(self.task_frame, textvariable=self.task_var, font=("Helvetica", 10), bg=self.colors["btn_bg"], fg=self.colors["fg_sub"], bd=0, justify="center")
         self.task_entry.pack(fill=tk.X, ipady=6)
@@ -441,15 +450,16 @@ class GodModeApp:
         if self.is_running:
             mins, secs = divmod(int(self.current_time), 60)
             time_str = "{:02d}:{:02d}".format(mins, secs)
-            new_title = f"{time_str} - God-Mode Timer"
-            if self.root.title() != new_title:
+            app_title = self.loc.get("app_title")
+            new_title = f"{time_str} - {app_title}"
+            if self.root.title() != new_title and self.root.title() != app_title:
                 self.root.title(new_title)
             
             # 작업 표시줄 진행률 업데이트
             total_time = self.work_time if self.mode == "work" else self.break_time
             self.taskbar.set_progress(self.current_time, total_time)
-        elif self.root.title() != "God-Mode Timer":
-            self.root.title("God-Mode Timer")
+        elif self.root.title() != self.loc.get("app_title"):
+            self.root.title(self.loc.get("app_title"))
             self.taskbar.reset()
 
     def load_font(self, size, bold=False):
@@ -503,7 +513,7 @@ class GodModeApp:
             self.canvas.bind("<B1-Motion>", self.do_move)
             self.canvas.bind("<Double-Button-1>", self.exit_mini_mode)
             
-            show_toast("미니 모드", "더블 클릭하면 원래대로 돌아옵니다.")
+            show_toast(self.loc.get("mini_mode_title"), self.loc.get("mini_mode_msg"))
         else:
             self.exit_mini_mode()
 
@@ -606,7 +616,7 @@ class GodModeApp:
         self.enable_settings_button()
         self.enable_task_entry()
         
-        show_toast("집중 대기", "휴식을 건너뛰었습니다. 준비되면 시작하세요.")
+        show_toast(self.loc.get("focus_wait_title"), self.loc.get("skip_break_msg"))
         self.draw_timer()
 
     def repeat_break(self):
@@ -626,7 +636,7 @@ class GodModeApp:
         self.disable_settings_button()
         self.disable_task_entry()
         
-        show_toast("휴식 반복", "휴식 시간을 연장합니다.")
+        show_toast(self.loc.get("break_repeat_title"), self.loc.get("break_repeat_msg"))
         self.draw_timer()
         
         if not was_running:
@@ -636,7 +646,7 @@ class GodModeApp:
         if self.is_running:
             # 엄격 모드 체크 (집중 모드일 때만)
             if self.mode == "work" and self.setting_strict_mode:
-                show_toast("엄격 모드", "집중 중에는 타이머를 멈출 수 없습니다!")
+                show_toast(self.loc.get("strict_mode_title"), self.loc.get("strict_mode_msg"))
                 return
 
             # 실행 중이면 중지(초기화)
@@ -651,9 +661,9 @@ class GodModeApp:
             self.disable_task_entry()
             
             if self.mode == "work":
-                show_toast("집중 시작", "집중 타이머가 시작되었습니다.")
+                show_toast(self.loc.get("focus_start_title"), self.loc.get("focus_start_msg"))
             else:
-                show_toast("휴식 시작", "휴식 타이머가 시작되었습니다.")
+                show_toast(self.loc.get("break_start_title"), self.loc.get("break_start_msg"))
             
             self.last_time = time.time()
             self.count_down()
@@ -698,15 +708,15 @@ class GodModeApp:
             # 4번 집중(4의 배수)마다 15분 긴 휴식
             if self.today_count > 0 and self.today_count % self.setting_long_break_interval == 0:
                 self.break_time = self.setting_long_break_min * 60
-                msg = f"{self.setting_long_break_interval}번의 집중({self.today_count}회) 완료! {self.setting_long_break_min}분간 긴 휴식을 취하세요."
+                msg = self.loc.get("long_break_msg_fmt", interval=self.setting_long_break_interval, count=self.today_count, min=self.setting_long_break_min)
             else:
                 self.break_time = self.setting_short_break_min * 60
-                msg = "집중 시간이 끝났습니다! 휴식을 취하세요."
+                msg = self.loc.get("short_break_msg")
             
             self.current_time = self.break_time
             
             if self.setting_auto_start:
-                show_toast("집중 완료", msg + " (자동 시작)")
+                show_toast(self.loc.get("focus_complete_title"), msg + " " + self.loc.get("auto_start_suffix"))
                 self.is_running = True
                 self.update_topmost_status()
                 self.update_start_button_color()
@@ -715,7 +725,7 @@ class GodModeApp:
                 self.draw_timer()
                 self.root.after(50, self.count_down)
             else:
-                show_toast("집중 완료", msg)
+                show_toast(self.loc.get("focus_complete_title"), msg)
                 self.is_running = False
                 self.update_topmost_status()
                 self.update_control_buttons_visibility()
@@ -728,7 +738,7 @@ class GodModeApp:
             self.current_time = self.work_time
             
             if self.setting_auto_start:
-                show_toast("휴식 완료", "휴식 시간이 끝났습니다! 집중 시간이 시작됩니다.")
+                show_toast(self.loc.get("break_complete_title"), self.loc.get("break_complete_auto_start_msg"))
                 self.is_running = True
                 self.update_topmost_status()
                 self.update_start_button_color()
@@ -736,7 +746,7 @@ class GodModeApp:
                 self.draw_timer()
                 self.root.after(50, self.count_down)
             else:
-                show_toast("휴식 완료", "휴식 시간이 끝났습니다! 다시 집중해볼까요?")
+                show_toast(self.loc.get("break_complete_title"), self.loc.get("break_complete_msg"))
                 self.is_running = False
                 self.update_topmost_status()
                 self.update_control_buttons_visibility()
@@ -904,6 +914,7 @@ class GodModeApp:
                 self.setting_opacity = data.get("opacity", 1.0)
                 self.setting_ui_scale = data.get("ui_scale", 100)
                 self.setting_theme = data.get("theme", "Light")
+                self.setting_language = data.get("language", self.loc.lang_code)
                 self.window_x = data.get("window_x")
                 self.window_y = data.get("window_y")
                 self.settings_window_x = data.get("settings_window_x")
@@ -937,6 +948,7 @@ class GodModeApp:
         self.window_x = None
         self.window_y = None
         self.setting_theme = "Light"
+        self.setting_language = self.loc.get_system_language()
         self.settings_window_x = None
         self.settings_window_y = None
         self.stats_window_x = None
@@ -965,6 +977,7 @@ class GodModeApp:
             "opacity": self.setting_opacity,
             "ui_scale": self.setting_ui_scale,
             "theme": self.setting_theme,
+            "language": self.setting_language,
             "window_x": self.root.winfo_x(),
             "window_y": self.root.winfo_y(),
             "settings_window_x": self.settings_window_x,
@@ -982,13 +995,14 @@ class GodModeApp:
 
     def on_closing(self):
         if self.is_running and self.mode == "work":
-            show_toast("집중 모드", "집중 중에는 종료할 수 없습니다!")
+            show_toast(self.loc.get("focus_mode_title"), self.loc.get("strict_mode_exit_msg"))
             return
-        self.show_exit_popup()
+        self.save_settings_to_file()
+        self.root.destroy()
 
     def show_exit_popup(self):
         popup = tk.Toplevel(self.root)
-        popup.title("종료")
+        popup.title(self.loc.get("confirm_exit_title"))
         w = int(320 * self.scale_factor)
         h = int(160 * self.scale_factor)
         popup.geometry(f"{w}x{h}")
@@ -1007,7 +1021,7 @@ class GodModeApp:
         container = tk.Frame(popup, bg=self.colors["bg"])
         container.pack(expand=True)
 
-        tk.Label(container, text="정말 종료하시겠습니까?", font=("Helvetica", int(11 * self.scale_factor)), bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=(0, int(20 * self.scale_factor)))
+        tk.Label(container, text=self.loc.get("confirm_exit_msg"), font=("Helvetica", int(11 * self.scale_factor)), bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=(0, int(20 * self.scale_factor)))
 
         btn_frame = tk.Frame(container, bg=self.colors["bg"])
         btn_frame.pack()
@@ -1017,8 +1031,8 @@ class GodModeApp:
             self.save_settings_to_file()
             self.root.destroy()
 
-        tk.Button(btn_frame, text="종료", font=("Helvetica", 10, "bold"), bg=self.colors["stop_btn_bg"], fg="white", bd=0, padx=15, pady=5, command=do_exit).pack(side=tk.LEFT, padx=10)
-        tk.Button(btn_frame, text="취소", font=("Helvetica", 10), bg="#E0E0E0", fg="#555555", bd=0, padx=15, pady=5, command=popup.destroy).pack(side=tk.LEFT, padx=10)
+        tk.Button(btn_frame, text=self.loc.get("exit"), font=("Helvetica", 10, "bold"), bg=self.colors["stop_btn_bg"], fg="white", bd=0, padx=15, pady=5, command=do_exit).pack(side=tk.LEFT, padx=10)
+        tk.Button(btn_frame, text=self.loc.get("cancel"), font=("Helvetica", 10), bg="#E0E0E0", fg="#555555", bd=0, padx=15, pady=5, command=popup.destroy).pack(side=tk.LEFT, padx=10)
         
         popup.bind('<Return>', do_exit)
 
@@ -1215,16 +1229,39 @@ class GodModeApp:
         
         self.draw_timer()
 
+    def refresh_language(self):
+        """UI에 표시된 모든 텍스트를 현재 언어 설정에 맞게 새로고침합니다."""
+        # 1. 메인 윈도우 UI 업데이트
+        if not self.is_running:
+            self.root.title(self.loc.get("app_title"))
+        
+        self.task_placeholder = self.loc.get("task_placeholder")
+        if not self.task_var.get() or self.task_entry.cget('fg') == self.colors['fg_sub']:
+            self.task_var.set("")
+            self.on_task_focus_out(None)
+            
+        # 2. 통계 창이 열려있다면 언어 새로고침
+        if hasattr(self, 'stats_window') and self.stats_window and self.stats_window.winfo_exists():
+            if hasattr(self.stats_window, 'refresh_language'):
+                self.stats_window.refresh_language()
+
 if __name__ == "__main__":
-    # High DPI 설정 (해상도에 따른 UI 잘림 및 흐림 방지)
-    try:
-        import ctypes
-        # Windows 8.1 이상 (Process System DPI Aware)
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
-    except Exception:
+    # 윈도우 환경 설정 (콘솔 숨기기 및 High DPI)
+    if sys.platform == "win32":
         try:
-            # Windows Vista 이상
-            ctypes.windll.user32.SetProcessDPIAware()
+            import ctypes
+            
+            # 콘솔 창 숨기기 (python.exe로 실행 시 불필요한 콘솔 제거)
+            if not getattr(sys, 'frozen', False):
+                hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+                if hwnd != 0:
+                    ctypes.windll.user32.ShowWindow(hwnd, 0)
+
+            # High DPI 설정
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwareness(1)
+            except Exception:
+                ctypes.windll.user32.SetProcessDPIAware()
         except Exception:
             pass
 
