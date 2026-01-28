@@ -13,45 +13,16 @@ import re
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 import json
 import os
-import pystray
-from pystray import MenuItem as item
-import threading
 from datetime import datetime
 
 class GodModeApp:
     def __init__(self, root):
         self.root = root
         self.root.title("God-Mode Timer")
-        self.root.geometry("300x400")
-        self.root.resizable(True, True)
-        self.root.minsize(300, 400)
-        
 
-        # 윈도우 작업 표시줄 진행률 초기화
-        self.taskbar = WindowsTaskbar(root)
-        
-        # 윈도우 아이콘 설정
-        self.set_window_icon()
-
-        # 시스템 트레이 아이콘 설정
-        self.init_tray_icon()
-
-        # 윈도우 닫기 이벤트 처리
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-
-        # 최소화 이벤트 처리 (트레이로 숨기기)
-        self.root.bind("<Unmap>", self.minimize_to_tray)
-
-        # 윈도우 자석 효과 (Snap to Edge)
-        self.root.bind("<Configure>", self.snap_to_edge)
-
-        # 스페이스바 단축키
-        self.root.bind("<space>", self.toggle_timer_shortcut)
-
-        # 마우스 휠로 시간 조절
-        self.root.bind("<MouseWheel>", self.handle_mouse_wheel)
-
-        # 상태 변수
+        # --- 상태 변수 및 설정 로드 (UI 스케일 계산 전 선행) ---
+        self.load_env()
+        self.app_version = os.environ.get("VERSION", "v1.20")
         self.is_running = False
         self.setting_always_on_top = True
         self.setting_auto_start = False
@@ -63,12 +34,55 @@ class GodModeApp:
         self.setting_show_task_input = False
         self.setting_strict_mode = False
         self.setting_opacity = 1.0
+        self.setting_ui_scale = 100 # 사용자 UI 크기 설정 (%)
+        self.setting_theme = "Light"
         self.is_mini_mode = False
-        self.normal_geometry = "300x400"
         
-        # 설정 파일 로드
+        self.window_x = None
+        self.window_y = None
+        self.settings_window_x = None
+        self.settings_window_y = None
+        self.stats_window_x = None
+        self.stats_window_y = None
+        self.stats_window_w = None
+        self.stats_window_h = None
+        self.stats_window = None
+        self.last_scale = 1.0
+        self.transition_job = None
+
         self.load_settings()
+        
+        # 화면 해상도에 비례하여 초기 크기 설정 (FHD 기준)
+        self.update_scale_factor()
+        
+        self.root.geometry(f"{self.initial_w}x{self.initial_h}")
+        self.root.resizable(True, True)
+        self.root.minsize(300, 400)
+        
+        # 윈도우 작업 표시줄 진행률 초기화
+        self.taskbar = WindowsTaskbar(root)
+        
+        # 윈도우 아이콘 설정
+        self.set_window_icon()
+
+        # 윈도우 닫기 이벤트 처리
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+        # 윈도우 자석 효과 (Snap to Edge)
+        self.root.bind("<Configure>", self.on_window_configure)
+
+        # 스페이스바 단축키
+        self.root.bind("<space>", self.toggle_timer_shortcut)
+
+        # 마우스 휠로 시간 조절
+        self.root.bind("<MouseWheel>", self.handle_mouse_wheel)
+
+        self.normal_geometry = f"{self.initial_w}x{self.initial_h}"
+        
         self.refresh_today_count()
+        
+        if self.window_x is not None and self.window_y is not None:
+            self.root.geometry(f"+{self.window_x}+{self.window_y}")
         
         # 테마 색상 정의 및 적용
         self.update_theme_colors()
@@ -82,23 +96,9 @@ class GodModeApp:
         self.current_time = self.work_time
         self.mode = "work"  # 'work' or 'break'
 
-        # 타이머 표시 (도형)
-        self.canvas = tk.Canvas(root, bg=self.colors["bg"], highlightthickness=0)
-        self.canvas.pack(pady=0, expand=True, fill=tk.BOTH)
-
-        self.draw_timer()
-        self.canvas.bind("<Configure>", lambda e: self.draw_timer())
-        self.canvas.bind("<Button-1>", self.handle_mouse_input)
-        self.canvas.bind("<B1-Motion>", self.handle_mouse_input)
-        self.canvas.bind("<Double-Button-1>", self.on_canvas_double_click)
-        
-        # 마우스 커서 변경
-        self.canvas.bind("<Enter>", lambda e: self.root.config(cursor="hand2"))
-        self.canvas.bind("<Leave>", lambda e: self.root.config(cursor=""))
-
-        # 보조 버튼 프레임 (통계, 설정, 미니모드) - 하단 배치
+        # 보조 버튼 프레임 (통계, 설정, 미니모드) - 하단 배치 (가장 먼저 pack하여 공간 확보)
         self.btn_frame = tk.Frame(root, bg=self.colors["bg"])
-        self.btn_frame.pack(pady=(0, 15))
+        self.btn_frame.pack(side=tk.BOTTOM, pady=(0, 15))
 
         self.start_button = tk.Button(self.btn_frame, text="▶", font=("Helvetica", 16), width=4, bd=0, bg=self.colors["start_btn_bg"], fg=self.colors["btn_fg"], pady=3, command=self.toggle_timer)
         self.start_button.pack(side=tk.LEFT, padx=2)
@@ -155,80 +155,103 @@ class GodModeApp:
         self.task_entry.bind("<FocusOut>", self.on_task_focus_out)
         self.task_entry.bind("<Return>", self.on_task_return)
 
+        # 타이머 표시 (도형) - 나머지 공간 채움
+        self.canvas = tk.Canvas(root, bg=self.colors["bg"], highlightthickness=0)
+        self.canvas.pack(pady=0, expand=True, fill=tk.BOTH)
+
+        self.draw_timer()
+        self.canvas.bind("<Configure>", lambda e: self.draw_timer())
+        self.canvas.bind("<Button-1>", self.handle_mouse_input)
+        self.canvas.bind("<B1-Motion>", self.handle_mouse_input)
+        self.canvas.bind("<Double-Button-1>", self.on_canvas_double_click)
+        
+        # 마우스 커서 변경
+        self.canvas.bind("<Enter>", lambda e: self.root.config(cursor="hand2"))
+        self.canvas.bind("<Leave>", lambda e: self.root.config(cursor=""))
+
         self.tk_image = None
         
         # 설정에 따라 할 일 입력창 표시 여부 결정
         self.update_task_input_visibility()
         self.update_control_buttons_visibility()
 
+    def load_env(self):
+        """프로젝트 루트의 .env 파일에서 환경 변수를 로드합니다."""
+        try:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            env_path = os.path.join(base_dir, ".env")
+            if os.path.exists(env_path):
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#"): continue
+                        if "=" in line:
+                            key, value = line.split("=", 1)
+                            os.environ[key.strip()] = value.strip().strip('"').strip("'")
+        except Exception:
+            pass
+
+    def update_scale_factor(self):
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # 너비와 높이 비율을 모두 고려하여 스케일 계산 (FHD 1920x1080 기준)
+        ratio_w = screen_width / 1920
+        ratio_h = screen_height / 1080
+        base_scale = min(ratio_w, ratio_h)
+        
+        # DPI 스케일링 감지 (Windows 디스플레이 배율 설정 반영)
+        try:
+            dpi = self.root.winfo_fpixels('1i')
+            dpi_scale = dpi / 96.0
+        except Exception:
+            dpi_scale = 1.0
+        
+        # 해상도/DPI에 따른 자동 스케일 계산
+        auto_scale = max(1.0, min(3.0, max(base_scale, dpi_scale)))
+        
+        # 사용자 UI 크기 설정 적용
+        self.scale_factor = auto_scale * (self.setting_ui_scale / 100.0)
+        
+        self.initial_w = int(300 * self.scale_factor)
+        self.initial_h = int(400 * self.scale_factor)
+        
+        # 화면 높이의 90%를 넘지 않도록 안전장치 (세로 해상도가 낮은 경우)
+        if self.initial_h > screen_height * 0.9:
+            self.scale_factor = (screen_height * 0.9) / 400
+            self.initial_w = int(300 * self.scale_factor)
+            self.initial_h = int(400 * self.scale_factor)
+
+    def apply_ui_scale(self):
+        self.update_scale_factor()
+        self.root.geometry(f"{self.initial_w}x{self.initial_h}")
+        self.normal_geometry = f"{self.initial_w}x{self.initial_h}"
+        
+        # 통계 창이 열려있다면 크기 및 UI 업데이트
+        if hasattr(self, 'stats_window') and self.stats_window and self.stats_window.winfo_exists():
+            if hasattr(self.stats_window, 'refresh_ui_scale'):
+                self.stats_window.refresh_ui_scale()
+
     def set_window_icon(self):
         # 윈도우 아이콘 동적 생성 (황금 번개 - 갓생 모드)
-        size = 64
+        # 고해상도 아이콘을 위해 크기 증가 (64 -> 256)
+        size = 256
         image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
         
         # 배경 원 (다크 그레이)
-        draw.ellipse((2, 2, 62, 62), fill="#333333", outline="#555555")
+        margin = size * 2 / 64
+        draw.ellipse((margin, margin, size - margin, size - margin), fill="#333333", outline="#555555")
         
         # Lightning Bolt Points (Zigzag shape)
-        points = [(36, 4), (20, 34), (32, 34), (16, 60), (48, 26), (36, 26)]
-        draw.polygon(points, fill="#FFD700", outline="#B8860B", width=2)
+        base_points = [(36, 4), (20, 34), (32, 34), (16, 60), (48, 26), (36, 26)]
+        points = [(x * size / 64, y * size / 64) for x, y in base_points]
+        
+        width = int(max(1, 2 * size / 64))
+        draw.polygon(points, fill="#FFD700", outline="#B8860B", width=width)
         
         self.tk_icon = ImageTk.PhotoImage(image)
         self.root.iconphoto(True, self.tk_icon)
-
-    def init_tray_icon(self):
-        # 트레이 아이콘용 이미지 생성
-        image = self.create_tray_image()
-        
-        # 메뉴 정의
-        menu = (
-            item('열기', self.show_window_from_tray, default=True),
-            item('종료', self.quit_app_from_tray)
-        )
-        
-        self.tray_icon = pystray.Icon("GodModeTimer", image, "God-Mode Timer", menu)
-        
-        # 별도 스레드에서 실행 (Tkinter 메인루프와 충돌 방지)
-        threading.Thread(target=self.tray_icon.run, daemon=True).start()
-
-    def create_tray_image(self):
-        # 64x64 아이콘 생성 (set_window_icon 로직 재사용)
-        size = 64
-        image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(image)
-        
-        # 배경 원 (다크 그레이)
-        draw.ellipse((2, 2, 62, 62), fill="#333333", outline="#555555")
-        
-        # Lightning Bolt Points (Zigzag shape)
-        points = [(36, 4), (20, 34), (32, 34), (16, 60), (48, 26), (36, 26)]
-        draw.polygon(points, fill="#FFD700", outline="#B8860B", width=2)
-        
-        return image
-
-    def show_window_from_tray(self, icon=None, item=None):
-        self.root.after(0, self._show_window_safe)
-
-    def _show_window_safe(self):
-        self.root.deiconify()
-        self.update_topmost_status()
-        self.root.lift()
-        self.root.focus_force()
-
-    def quit_app_from_tray(self, icon=None, item=None):
-        self.root.after(0, self._handle_tray_quit)
-
-    def _handle_tray_quit(self):
-        if self.is_running and self.mode == "work":
-            show_toast("집중 모드", "집중 중에는 종료할 수 없습니다!")
-            return
-        self.tray_icon.stop()
-        self._quit_app_safe()
-
-    def _quit_app_safe(self):
-        self.save_settings_to_file()
-        self.root.destroy()
 
     def create_button_icon(self, shape, color, size=(24, 24)):
         # 고품질 렌더링을 위한 슈퍼샘플링
@@ -302,8 +325,11 @@ class GodModeApp:
         if h <= 1: h = 320
         
         # 고품질 렌더링을 위한 슈퍼샘플링 (2배 확대 후 축소)
-        scale = 2
-        img_w, img_h = w * scale, h * scale
+        supersample = 2
+        img_w, img_h = w * supersample, h * supersample
+        
+        # UI 스케일링 비율 (기본 1.0)
+        ui_scale = getattr(self, 'last_scale', 1.0)
         
         # 투명 배경 대신 캔버스 배경색으로 이미지 생성
         image = Image.new("RGBA", (img_w, img_h), self.colors["bg"])
@@ -313,8 +339,11 @@ class GodModeApp:
         radius = min(img_w, img_h) / 2 * 0.88
         arc_radius = radius * 0.65
         
+        # 선 두께 계산 (UI 스케일 반영)
+        outline_width = max(1, int(3 * supersample * ui_scale))
+        
         # 0. 배경 원
-        draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius), fill=self.colors["timer_bg"], outline=self.colors["timer_outline"], width=int(2*scale))
+        draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius), fill=self.colors["timer_bg"], outline=self.colors["timer_outline"], width=outline_width)
         
         # 1. 남은 시간 영역 그리기
         display_time = min(self.current_time, 3600)
@@ -331,36 +360,27 @@ class GodModeApp:
             draw.pieslice((cx-arc_radius, cy-arc_radius, cx+arc_radius, cy+arc_radius), start=start_angle, end=end_angle, fill=color, outline=color)
 
         # 2. 눈금 그리기 (0~60분)
-        font_size = max(10, int(radius * 0.1))
-        try:
-            font = ImageFont.truetype(resource_path("arialbd.ttf"), font_size)
-        except IOError:
-            try:
-                font = ImageFont.truetype("arialbd.ttf", font_size)
-            except IOError:
-                try:
-                    font = ImageFont.truetype("arial.ttf", font_size)
-                except IOError:
-                    font = ImageFont.load_default()
+        font_size = max(9, int(radius * 0.09))
+        font = self.load_font(font_size, bold=True)
 
         for i in range(60):
             angle_deg = 90 - (i * 6)
             angle_rad = math.radians(angle_deg)
             
             if i % 5 == 0:
-                tick_len = 20 * scale
-                width = 2 * scale
+                tick_len = 10 * supersample * ui_scale
+                width = 3.2805 * supersample * ui_scale
                 
                 # 5분 단위 숫자 표시
-                text_radius = radius - (35 * scale)
+                text_radius = radius - (35 * supersample * ui_scale)
                 tx = cx + text_radius * math.cos(angle_rad)
                 ty = cy - text_radius * math.sin(angle_rad)
                 text = str(i if i != 0 else 60)
                 draw.text((tx, ty), text, font=font, fill=self.colors["timer_outline"], anchor="mm")
             else:
-                tick_len = 10 * scale
-                width = 1 * scale
-                
+                tick_len = 5 * supersample * ui_scale
+                width = 1.64025 * supersample * ui_scale
+            
             x_out = cx + radius * math.cos(angle_rad)
             y_out = cy - radius * math.sin(angle_rad)
             x_in = cx + (radius - tick_len) * math.cos(angle_rad)
@@ -375,14 +395,8 @@ class GodModeApp:
         mins, secs = divmod(int(self.current_time), 60)
         time_str = "{:02d}:{:02d}".format(mins, secs)
         
-        font_size_time = max(20, int(radius * 0.16))
-        try:
-            font_time = ImageFont.truetype(resource_path("arialbd.ttf"), font_size_time)
-        except IOError:
-            try:
-                font_time = ImageFont.truetype("arialbd.ttf", font_size_time)
-            except IOError:
-                font_time = ImageFont.load_default()
+        font_size_time = max(18, int(radius * 0.14))
+        font_time = self.load_font(font_size_time, bold=True)
             
         draw.text((cx, cy), time_str, font=font_time, fill=self.colors["fg"], anchor="mm")
         
@@ -397,11 +411,13 @@ class GodModeApp:
                 current_cycle_count = self.today_count % cycle_len
             
             # 점 그리기 설정
-            dot_radius = 4 * scale
-            dot_spacing = 10 * scale
+            dot_radius = 4 * supersample * ui_scale
+            dot_spacing = 10 * supersample * ui_scale
             total_width = (cycle_len * dot_radius * 2) + ((cycle_len - 1) * dot_spacing)
             start_x = cx - (total_width / 2) + dot_radius
             dot_y = cy + (radius * 0.45) # 시간 텍스트 아래 적절한 위치
+            
+            dot_outline_width = max(1, int(1.5 * supersample * ui_scale))
             
             for i in range(cycle_len):
                 dx = start_x + i * (dot_radius * 2 + dot_spacing)
@@ -414,7 +430,7 @@ class GodModeApp:
                     outline_color = "#AAAAAA"
                 
                 draw.ellipse((dx - dot_radius, dot_y - dot_radius, dx + dot_radius, dot_y + dot_radius), 
-                             fill=fill_color, outline=outline_color, width=int(1.5*scale))
+                             fill=fill_color, outline=outline_color, width=dot_outline_width)
         
         # 이미지 리사이즈 (안티앨리어싱) 및 캔버스에 표시
         image = image.resize((w, h), resample=Image.BILINEAR)
@@ -435,6 +451,32 @@ class GodModeApp:
         elif self.root.title() != "God-Mode Timer":
             self.root.title("God-Mode Timer")
             self.taskbar.reset()
+
+    def load_font(self, size, bold=False):
+        """시스템 폰트를 우선적으로 로드하여 고해상도에서 깨짐을 방지합니다."""
+        font_candidates = []
+        if sys.platform == "win32":
+            if bold:
+                font_candidates.extend(["arlrdbd.ttf", "segoeuib.ttf", "malgunbd.ttf", "arialbd.ttf"])
+            else:
+                font_candidates.extend(["segoeui.ttf", "malgun.ttf", "arial.ttf"])
+        
+        # 기본 후보 (리소스 경로 포함)
+        if bold:
+            font_candidates.append("arialbd.ttf")
+        else:
+            font_candidates.append("arial.ttf")
+
+        for font_name in font_candidates:
+            try:
+                return ImageFont.truetype(font_name, size)
+            except IOError:
+                try:
+                    return ImageFont.truetype(resource_path(font_name), size)
+                except IOError:
+                    continue
+        
+        return ImageFont.load_default()
 
     def toggle_mini_mode(self):
         if not self.is_mini_mode:
@@ -513,9 +555,9 @@ class GodModeApp:
         self.update_topmost_status()
         
         # UI 복원
+        self.btn_frame.pack(side=tk.BOTTOM, before=self.canvas, pady=(0, 15))
         self.update_task_input_visibility()
         self.update_control_buttons_visibility()
-        self.btn_frame.pack(pady=(0, 15))
         
         # 이벤트 복원
         self.canvas.unbind("<ButtonPress-1>")
@@ -555,21 +597,17 @@ class GodModeApp:
         self.mode = "work"
         self.current_time = self.work_time
         
-        was_running = self.is_running
-        self.is_running = True
+        # 타이머를 즉시 시작하지 않고 대기 상태로 전환
+        self.is_running = False
         self.update_topmost_status()
-        self.last_time = time.time()
         
         self.update_start_button_color()
         self.update_control_buttons_visibility()
-        self.disable_settings_button()
-        self.disable_task_entry()
+        self.enable_settings_button()
+        self.enable_task_entry()
         
-        show_toast("집중 시작", "휴식을 건너뛰고 집중을 시작합니다.")
+        show_toast("집중 대기", "휴식을 건너뛰었습니다. 준비되면 시작하세요.")
         self.draw_timer()
-        
-        if not was_running:
-            self.count_down()
 
     def repeat_break(self):
         """휴식을 반복합니다 (현재 집중 모드 대기 상태에서 다시 휴식 모드로 전환)."""
@@ -864,6 +902,16 @@ class GodModeApp:
                 self.setting_show_task_input = data.get("show_task_input", False)
                 self.setting_strict_mode = data.get("strict_mode", False)
                 self.setting_opacity = data.get("opacity", 1.0)
+                self.setting_ui_scale = data.get("ui_scale", 100)
+                self.setting_theme = data.get("theme", "Light")
+                self.window_x = data.get("window_x")
+                self.window_y = data.get("window_y")
+                self.settings_window_x = data.get("settings_window_x")
+                self.settings_window_y = data.get("settings_window_y")
+                self.stats_window_x = data.get("stats_window_x")
+                self.stats_window_y = data.get("stats_window_y")
+                self.stats_window_w = data.get("stats_window_w")
+                self.stats_window_h = data.get("stats_window_h")
         except Exception:
             self.restore_default_settings()
 
@@ -885,6 +933,16 @@ class GodModeApp:
         self.setting_long_break_interval = 4
         self.setting_show_task_input = False
         self.setting_strict_mode = False
+        self.setting_ui_scale = 100
+        self.window_x = None
+        self.window_y = None
+        self.setting_theme = "Light"
+        self.settings_window_x = None
+        self.settings_window_y = None
+        self.stats_window_x = None
+        self.stats_window_y = None
+        self.stats_window_w = None
+        self.stats_window_h = None
         self.save_settings_to_file()
         self.setting_opacity = 1.0
         self.update_topmost_status()
@@ -904,7 +962,17 @@ class GodModeApp:
             "long_break_interval": self.setting_long_break_interval,
             "show_task_input": self.setting_show_task_input,
             "strict_mode": self.setting_strict_mode,
-            "opacity": self.setting_opacity
+            "opacity": self.setting_opacity,
+            "ui_scale": self.setting_ui_scale,
+            "theme": self.setting_theme,
+            "window_x": self.root.winfo_x(),
+            "window_y": self.root.winfo_y(),
+            "settings_window_x": self.settings_window_x,
+            "settings_window_y": self.settings_window_y,
+            "stats_window_x": self.stats_window_x,
+            "stats_window_y": self.stats_window_y,
+            "stats_window_w": getattr(self, "stats_window_w", None),
+            "stats_window_h": getattr(self, "stats_window_h", None)
         }
         try:
             with open(get_user_data_path("settings.json"), "w", encoding="utf-8") as f:
@@ -921,27 +989,32 @@ class GodModeApp:
     def show_exit_popup(self):
         popup = tk.Toplevel(self.root)
         popup.title("종료")
-        popup.geometry("320x160")
+        w = int(320 * self.scale_factor)
+        h = int(160 * self.scale_factor)
+        popup.geometry(f"{w}x{h}")
         popup.resizable(False, False)
+        popup.minsize(200, 100)
         popup.configure(bg=self.colors["bg"])
         popup.transient(self.root)
         popup.grab_set()
         popup.focus_set()
         
         # 화면 중앙 배치
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 160
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 80
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (w // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (h // 2)
         popup.geometry(f"+{x}+{y}")
 
-        tk.Label(popup, text="정말 종료하시겠습니까?", font=("Helvetica", 11), bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=(30, 20))
+        container = tk.Frame(popup, bg=self.colors["bg"])
+        container.pack(expand=True)
 
-        btn_frame = tk.Frame(popup, bg=self.colors["bg"])
-        btn_frame.pack(pady=5)
+        tk.Label(container, text="정말 종료하시겠습니까?", font=("Helvetica", int(11 * self.scale_factor)), bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=(0, int(20 * self.scale_factor)))
+
+        btn_frame = tk.Frame(container, bg=self.colors["bg"])
+        btn_frame.pack()
 
         def do_exit(event=None):
             popup.destroy()
             self.save_settings_to_file()
-            self.tray_icon.stop()
             self.root.destroy()
 
         tk.Button(btn_frame, text="종료", font=("Helvetica", 10, "bold"), bg=self.colors["stop_btn_bg"], fg="white", bd=0, padx=15, pady=5, command=do_exit).pack(side=tk.LEFT, padx=10)
@@ -949,10 +1022,35 @@ class GodModeApp:
         
         popup.bind('<Return>', do_exit)
 
-    def minimize_to_tray(self, event):
-        if event.widget == self.root and self.root.state() == 'iconic':
-            self.root.withdraw()
-            show_toast("백그라운드 실행", "앱이 시스템 트레이로 최소화되었습니다.")
+    def on_window_configure(self, event):
+        if event.widget == self.root:
+            self.snap_to_edge(event)
+            self.scale_ui()
+
+    def scale_ui(self):
+        w = self.root.winfo_width()
+        h = self.root.winfo_height()
+        
+        if w <= 1 or h <= 1: return
+        
+        # 기본 크기(300x400) 기준 스케일 계산
+        scale = min(w / 300, h / 400)
+        
+        # 변화가 작으면 무시 (성능 최적화)
+        if abs(self.last_scale - scale) < 0.05:
+            return
+            
+        self.last_scale = scale
+        self.apply_theme() # 아이콘 재생성 및 적용
+        
+        btn_w = int(50 * scale)
+        btn_h = int(40 * scale)
+        font_size = max(8, int(9 * scale))
+        
+        for btn in [self.start_button, self.stats_button, self.settings_button, self.skip_button, self.repeat_button]:
+            btn.config(width=btn_w, height=btn_h)
+        
+        self.task_entry.config(font=("Helvetica", font_size))
 
     def snap_to_edge(self, event):
         if event.widget != self.root:
@@ -1011,30 +1109,70 @@ class GodModeApp:
 
     def update_task_input_visibility(self):
         if self.setting_show_task_input:
-            self.task_frame.pack(pady=(0, 10), fill=tk.X, padx=30)
+            self.task_frame.pack(side=tk.BOTTOM, before=self.canvas, pady=(0, 10), fill=tk.X, padx=30)
         else:
             self.task_frame.pack_forget()
 
+    def get_theme_colors(self, theme):
+        if theme == "Dark":
+            return {
+                "bg": "#212121",
+                "fg": "#FFFFFF",
+                "fg_sub": "#E0E0E0",
+                "btn_bg": "#424242",
+                "btn_fg": "#FFFFFF",
+                "btn_hover": "#616161",
+                "timer_bg": "#303030",
+                "timer_center": "#616161",
+                "timer_work": "#FF5252",
+                "timer_break": "#66BB6A",
+                "timer_outline": "#FFFFFF",
+                "start_btn_bg": "#E64A19",
+                "start_btn_hover": "#D84315",
+                "stop_btn_bg": "#C62828",
+                "icon_color": "#FFFFFF",
+                "stats_bar_today": "#FF5252",
+                "stats_bar_other": "#EF9A9A"
+            }
+        else:
+            # Light Theme (Default)
+            return {
+                "bg": "#FFFFFF",
+                "fg": "#555555",
+                "fg_sub": "#888888",
+                "btn_bg": "#F5F5F5",
+                "btn_fg": "#555555",
+                "btn_hover": "#FFE0B2",
+                "timer_bg": "#FFFFFF",
+                "timer_center": "#F5F5F5",
+                "timer_work": "#FF5252",
+                "timer_break": "#4CAF50",
+                "timer_outline": "#000000",
+                "start_btn_bg": "#FFDAC1",
+                "start_btn_hover": "#FFC8A0",
+                "stop_btn_bg": "#FF9AA2",
+                "icon_color": "#555555",
+                "stats_bar_today": "#FF5252",
+                "stats_bar_other": "#FFCDD2"
+            }
+
     def update_theme_colors(self):
-        self.colors = {
-            "bg": "#FFF8F0",
-            "fg": "#555555",
-            "fg_sub": "#888888",
-            "btn_bg": "#F0F0F0",
-            "btn_fg": "#555555",
-            "btn_hover": "#E0E0E0",
-            "timer_bg": "#FFFFFF",
-            "timer_center": "#F0F0F0",
-            "timer_work": "#FF5252",
-            "timer_break": "#4CAF50",
-            "timer_outline": "black",
-            "start_btn_bg": "#FFDAC1",
-            "start_btn_hover": "#FFC8A0",
-            "stop_btn_bg": "#FF9AA2",
-            "icon_color": "#555555",
-            "stats_bar_today": "#FF5252",
-            "stats_bar_other": "#FFCDD2"
-        }
+        if self.transition_job:
+            self.root.after_cancel(self.transition_job)
+            self.transition_job = None
+        self.colors = self.get_theme_colors(self.setting_theme)
+
+    def transition_theme(self, target_theme, callback=None):
+        if self.transition_job:
+            self.root.after_cancel(self.transition_job)
+            self.transition_job = None
+            
+        self.setting_theme = target_theme
+        self.update_theme_colors()
+        self.apply_theme()
+        
+        if callback:
+            callback()
 
     def apply_theme(self):
         self.root.configure(bg=self.colors["bg"])
@@ -1055,12 +1193,14 @@ class GodModeApp:
             else:
                 self.task_entry.configure(fg=self.colors["fg"])
         
-        self.icon_play = self.create_button_icon("play", self.colors["icon_color"], size=(32, 32))
-        self.icon_settings = self.create_button_icon("settings", self.colors["icon_color"])
-        self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC")
-        self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"])
-        self.icon_skip = self.create_button_icon("skip", self.colors["icon_color"])
-        self.icon_repeat = self.create_button_icon("repeat", self.colors["icon_color"])
+        icon_s = int(24 * self.last_scale)
+        self.icon_play = self.create_button_icon("play", self.colors["icon_color"], size=(icon_s, icon_s))
+        self.icon_stop = self.create_button_icon("stop", "#FF5252", size=(icon_s, icon_s))
+        self.icon_settings = self.create_button_icon("settings", self.colors["icon_color"], size=(icon_s, icon_s))
+        self.icon_settings_disabled = self.create_button_icon("settings", "#CCCCCC", size=(icon_s, icon_s))
+        self.icon_stats = self.create_button_icon("stats", self.colors["icon_color"], size=(icon_s, icon_s))
+        self.icon_skip = self.create_button_icon("skip", self.colors["icon_color"], size=(icon_s, icon_s))
+        self.icon_repeat = self.create_button_icon("repeat", self.colors["icon_color"], size=(icon_s, icon_s))
         
         self.settings_button.config(image=self.icon_settings)
         self.stats_button.config(image=self.icon_stats)
@@ -1068,15 +1208,25 @@ class GodModeApp:
         self.repeat_button.config(image=self.icon_repeat)
         self.update_start_button_color()
         
+        # 통계 창이 열려있다면 테마 업데이트
+        if hasattr(self, 'stats_window') and self.stats_window and self.stats_window.winfo_exists():
+            if hasattr(self.stats_window, 'refresh_theme'):
+                self.stats_window.refresh_theme()
+        
         self.draw_timer()
 
 if __name__ == "__main__":
-    # High DPI 설정 (해상도에 따른 UI 잘림 방지)
+    # High DPI 설정 (해상도에 따른 UI 잘림 및 흐림 방지)
     try:
         import ctypes
+        # Windows 8.1 이상 (Process System DPI Aware)
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
-        pass
+        try:
+            # Windows Vista 이상
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
     root = tk.Tk()
     app = GodModeApp(root)

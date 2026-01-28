@@ -1,6 +1,6 @@
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 from common import get_user_data_path
 import json
@@ -149,12 +149,16 @@ def show_toast(title, message):
     except Exception as e:
         print(f"⚠️ 알림 전송 실패: {e}")
 
-def parse_logs():
-    """로그 파일을 읽어 날짜별 집중 횟수와 시간을 계산합니다."""
+def parse_logs(days=30):
+    """로그 파일을 읽어 최근 N일간의 날짜별 집중 횟수와 시간을 계산합니다."""
     log_path = get_user_data_path("godmode_log.txt")
     if not os.path.exists(log_path):
         return {}
     
+    # 기준 날짜 설정 (오늘로부터 days일 전)
+    cutoff_date = datetime.now() - timedelta(days=days)
+    cutoff_date = cutoff_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
     daily_stats = {}
     try:
         with open(log_path, "r", encoding="utf-8") as f:
@@ -165,6 +169,7 @@ def parse_logs():
                 timestamp_str = None
                 duration = 25
                 status = "success"
+                task_name = None
                 
                 # 1. JSON 파싱 시도
                 try:
@@ -172,27 +177,91 @@ def parse_logs():
                     timestamp_str = entry.get("timestamp")
                     duration = entry.get("duration", 25)
                     status = entry.get("status", "success")
+                    task_name = entry.get("task")
                 except json.JSONDecodeError:
                     # 2. 기존 텍스트 형식 파싱 (하위 호환성)
                     if "]" in line:
-                        timestamp_str = line.split("]")[0].strip("[")
+                        parts = line.split("]")
+                        timestamp_str = parts[0].strip("[")
+                        if len(parts) > 1 and "-" in parts[1]:
+                            task_name = parts[1].split("-", 1)[1].strip()
                 
                 if timestamp_str:
                     try:
                         dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                        if dt < cutoff_date:
+                            continue
+
                         date_key = dt.strftime("%Y-%m-%d")
                         
                         if date_key not in daily_stats:
-                            daily_stats[date_key] = {'count': 0, 'duration': 0}
+                            daily_stats[date_key] = {'count': 0, 'duration': 0, 'tasks': []}
                         
                         if status == "success":
                             daily_stats[date_key]['count'] += 1
                             daily_stats[date_key]['duration'] += int(duration)
+                            if task_name:
+                                daily_stats[date_key]['tasks'].append(task_name)
                     except ValueError:
                         continue
     except Exception:
         pass
     return daily_stats
+
+def get_recent_logs(days=30):
+    """최근 N일간의 로그 기록을 파싱하여 반환합니다 (최신순)."""
+    log_path = get_user_data_path("godmode_log.txt")
+    logs = []
+    has_more = False
+    if not os.path.exists(log_path):
+        return logs, has_more
+    
+    cutoff_date = datetime.now() - timedelta(days=days)
+
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            # 파일 전체를 읽어서 역순으로 처리
+            lines = f.readlines()
+            for line in reversed(lines):
+                line = line.strip()
+                if not line: continue
+                
+                timestamp_str = None
+                duration = 25
+                task_name = "-"
+                
+                try:
+                    entry = json.loads(line)
+                    timestamp_str = entry.get("timestamp")
+                    duration = int(entry.get("duration", 25))
+                    task_name = entry.get("task") or "-"
+                except json.JSONDecodeError:
+                    if "]" in line:
+                        parts = line.split("]")
+                        timestamp_str = parts[0].strip("[")
+                        if len(parts) > 1 and "-" in parts[1]:
+                            task_name = parts[1].split("-", 1)[1].strip()
+                
+                if timestamp_str:
+                    try:
+                        end_dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                        # 기준 날짜보다 오래된 기록이 나오면 중단 (역순 탐색이므로 이후는 모두 과거 데이터)
+                        if end_dt < cutoff_date:
+                            has_more = True
+                            break
+
+                        start_dt = end_dt - timedelta(minutes=duration)
+                        logs.append({
+                            "start": start_dt,
+                            "end": end_dt,
+                            "duration": duration,
+                            "task": task_name
+                        })
+                    except ValueError:
+                        continue
+    except Exception:
+        pass
+    return logs, has_more
 
 def get_side_position(root, width, height, offset=10):
     """메인 윈도우 우측(공간 부족 시 좌측)에 팝업 위치를 반환합니다."""
