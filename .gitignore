@@ -23,7 +23,7 @@ godmode_log.txt
 # Windows Store & Packaging
 *.msix
 *.pfx
-store_package/GodModTimer.exe
+store_package/GodModTimer*.exe
 .env
 store_package/AppxManifest.xml
 app.manifest

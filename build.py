@@ -2,6 +2,7 @@ import PyInstaller.__main__
 import sys
 import os
 import shutil
+import re
 
 def ensure_resources():
     """빌드에 필요한 리소스가 없으면 생성하거나 시스템에서 복사합니다."""
@@ -16,7 +17,35 @@ def ensure_resources():
             except Exception as e:
                 print(f"⚠️ 폰트 복사 실패: {e}")
 
-def generate_manifest():
+def get_version():
+    """앱 버전을 추출합니다 (.env 우선)."""
+    # 1. .env 파일 확인
+    if os.path.exists(".env"):
+        try:
+            with open(".env", "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip().startswith("VERSION="):
+                        return line.split("=", 1)[1].strip().strip('"').strip("'")
+        except:
+            pass
+
+    # 2. src/gui.py 확인 (Fallback)
+    try:
+        with open(os.path.join("src", "gui.py"), "r", encoding="utf-8") as f:
+            content = f.read()
+            # self.app_version = os.environ.get("VERSION", "v1.20") 패턴 처리
+            match = re.search(r'self\.app_version\s*=\s*os\.environ\.get\("VERSION",\s*["\']v?([\d\.]+)["\']\)', content)
+            if match:
+                return match.group(1)
+            # 기존 패턴 처리
+            match = re.search(r'self\.app_version\s*=\s*["\']v?([\d\.]+)["\']', content)
+            if match:
+                return match.group(1)
+    except Exception:
+        pass
+    return "1.0.0"
+
+def generate_manifest(version, exe_name):
     """템플릿과 .env 파일을 사용하여 AppxManifest.xml을 생성합니다."""
     template_path = os.path.join("store_package", "AppxManifest.template.xml")
     output_path = os.path.join("store_package", "AppxManifest.xml")
@@ -47,6 +76,17 @@ def generate_manifest():
     for key, value in env.items():
         content = content.replace(f"${{{key}}}", value)
         
+    # 버전 정보 치환 (MSIX는 Major.Minor.Build.Revision 4자리 형식 필요)
+    msix_version = version
+    if len(version.split('.')) == 2:
+        msix_version = f"{version}.0.0"
+    elif len(version.split('.')) == 3:
+        msix_version = f"{version}.0"
+    content = content.replace("${VERSION}", msix_version)
+    
+    # 실행 파일 이름 업데이트 (매니페스트 내 참조 수정)
+    content = content.replace("GodModTimer.exe", exe_name)
+
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"✅ Manifest 생성 완료: {output_path}")
@@ -68,18 +108,23 @@ def create_app_manifest():
 def build():
     print(" 배포용 실행 파일 빌드를 시작합니다...")
     
+    # 버전 추출
+    version = get_version()
+    exe_name = f"GodModTimer_v{version}.exe"
+    print(f"ℹ️ 앱 버전: {version} (빌드 파일명: {exe_name})")
+
     # 리소스 자동 준비
     ensure_resources()
     
     # 매니페스트 생성
-    generate_manifest()
+    generate_manifest(version, exe_name)
     
     # 실행 파일용 매니페스트 생성 (High DPI)
     create_app_manifest()
     
     options = [
         os.path.join('src', 'gui.py'),   # 메인 소스 파일 (src 폴더로 변경)
-        '--name=GodModTimer',            # 실행 파일 이름 설정
+        f'--name={os.path.splitext(exe_name)[0]}', # 실행 파일 이름 설정 (확장자 제외)
         '--onefile',                     # 단일 실행 파일(.exe)로 생성
         '--noconsole',                   # GUI 프로그램이므로 콘솔 창 숨김
         '--clean',                       # 빌드 캐시 삭제
@@ -88,7 +133,6 @@ def build():
         '--hidden-import=PIL.ImageTk',     # ImageTk 모듈 명시적 포함
         '--hidden-import=winrt.windows.ui.notifications', # WinRT 알림 모듈
         '--hidden-import=winrt.windows.data.xml.dom',     # WinRT XML 모듈
-        '--hidden-import=pystray',         # 시스템 트레이 모듈
         '--hidden-import=winrt.windows.storage', # WinRT 스토리지 모듈
         '--manifest=app.manifest',         # High DPI 매니페스트 포함
         '--paths=src',                     # 소스 경로 추가 (모듈 임포트 해결)
@@ -104,7 +148,7 @@ def build():
     
     PyInstaller.__main__.run(options)
     
-    print("\n✅ 빌드 완료! 'dist' 폴더에서 GodModTimer.exe를 확인하세요.")
+    print(f"\n✅ 빌드 완료! 'dist' 폴더에서 {exe_name}를 확인하세요.")
 
 if __name__ == "__main__":
     build()
