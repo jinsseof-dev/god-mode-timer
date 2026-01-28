@@ -12,13 +12,15 @@ def show_ad_window(app):
     app.ad_window = ad
     
     ad.title("집중 완료!")
-    ad.geometry("300x200")
+    w = int(300 * app.scale_factor)
+    h = int(200 * app.scale_factor)
+    ad.geometry(f"{w}x{h}")
     ad.resizable(False, False)
     ad.configure(bg=app.colors["bg"])
     ad.transient(app.root)
     
     # 메인 윈도우 옆에 배치
-    ad.geometry(get_side_position(app.root, 300, 200))
+    ad.geometry(get_side_position(app.root, w, h))
 
     # 1. 축하 메시지
     tk.Label(ad, text="🎉 집중 완료!", font=("Helvetica", 14, "bold"), 
