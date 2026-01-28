@@ -8,6 +8,7 @@ import threading
 import csv
 from tkinter import filedialog, messagebox
 import webbrowser
+import sqlite3
 
 def play_sound():
     """운영체제에 맞는 알림음을 재생합니다 (시스템 비프음 사용)."""
@@ -44,38 +45,90 @@ def play_tick_sound():
     except Exception:
         pass
 
+_db_initialized = False
+
+def get_db_connection():
+    """SQLite 데이터베이스 연결을 반환하고, 필요 시 테이블 생성 및 마이그레이션을 수행합니다."""
+    global _db_initialized
+    db_path = get_user_data_path("godmode_log.db")
+    
+    # 최초 실행 시 테이블 생성 및 데이터 이관
+    if not _db_initialized:
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        # 테이블 생성
+        c.execute('''CREATE TABLE IF NOT EXISTS logs
+                     (timestamp TEXT PRIMARY KEY, event TEXT, duration INTEGER, task TEXT, status TEXT)''')
+        c.execute('''CREATE INDEX IF NOT EXISTS idx_timestamp ON logs (timestamp)''')
+        conn.commit()
+        
+        # 기존 텍스트 로그 파일이 있다면 DB로 마이그레이션
+        txt_path = get_user_data_path("godmode_log.txt")
+        if os.path.exists(txt_path):
+            print("🔄 기존 로그를 SQLite 데이터베이스로 이관 중...")
+            migrated_count = 0
+            skipped_count = 0
+            try:
+                with open(txt_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line: continue
+                        try:
+                            # JSON 파싱
+                            entry = json.loads(line)
+                            ts = entry.get("timestamp")
+                            dur = entry.get("duration", 25)
+                            task = entry.get("task")
+                            status = entry.get("status", "success")
+                            
+                            if ts:
+                                c.execute("INSERT OR IGNORE INTO logs (timestamp, event, duration, task, status) VALUES (?, ?, ?, ?, ?)", 
+                                          (ts, "godmode_complete", dur, task, status))
+                                if c.rowcount > 0:
+                                    migrated_count += 1
+                                else:
+                                    skipped_count += 1
+                        except (json.JSONDecodeError, sqlite3.Error):
+                            continue
+                conn.commit()
+                # 이관 완료 후 원본 파일 이름 변경 (백업)
+                backup_path = txt_path + ".migrated"
+                if os.path.exists(backup_path):
+                    backup_path = txt_path + f".migrated_{int(time.time())}"
+                
+                os.rename(txt_path, backup_path)
+                print(f"✅ 데이터 이관 완료. (성공: {migrated_count}, 중복/건너뜀: {skipped_count})")
+            except Exception as e:
+                print(f"⚠️ 데이터 이관 실패: {e}")
+        
+        conn.close()
+        _db_initialized = True
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 def log_godmode(task_name=None, duration=25, status="success"):
-    """완료된 갓생(집중)을 로그 파일에 기록합니다."""
+    """완료된 갓생(집중)을 DB에 기록합니다."""
     try:
-        log_path = get_user_data_path("godmode_log.txt")
-        with open(log_path, "a", encoding="utf-8") as f:
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            # JSON 형식으로 로그 데이터 구성
-            log_entry = {
-                "timestamp": now,
-                "event": "godmode_complete",
-                "duration": duration,
-                "task": task_name,
-                "status": status
-            }
-            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
-        print(f"💾 기록이 '{log_path}'에 저장되었습니다.")
+        conn = get_db_connection()
+        c = conn.cursor()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        c.execute("INSERT INTO logs (timestamp, event, duration, task, status) VALUES (?, ?, ?, ?, ?)",
+                  (now, "godmode_complete", duration, task_name, status))
+        conn.commit()
+        conn.close()
+        print(f"💾 기록이 DB에 저장되었습니다.")
     except Exception as e:
         print(f"\n로그 저장 실패: {e}")
 
-def export_csv(parent):
-    """로그 데이터를 CSV 파일로 내보냅니다."""
-    log_path = get_user_data_path("godmode_log.txt")
-    if not os.path.exists(log_path):
-        messagebox.showinfo("알림", "기록된 로그가 없습니다.", parent=parent)
-        return
-
+def export_csv(parent, loc=None):
+    """DB 데이터를 CSV 파일로 내보냅니다."""
     file_path = filedialog.asksaveasfilename(
         parent=parent,
         defaultextension=".csv",
         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-        title="CSV로 내보내기",
+        title=loc.get("export_csv_title") if loc else "CSV로 내보내기",
         initialfile=f"godmode_logs_{datetime.now().strftime('%Y%m%d')}.csv"
     )
 
@@ -83,37 +136,87 @@ def export_csv(parent):
         return
 
     try:
-        with open(log_path, "r", encoding="utf-8") as f_in, \
-             open(file_path, "w", encoding="utf-8-sig", newline="") as f_out:
-            
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("SELECT timestamp, duration, task, status FROM logs ORDER BY timestamp DESC")
+        rows = c.fetchall()
+        conn.close()
+
+        if not rows:
+            title = loc.get("notice") if loc else "알림"
+            msg = loc.get("no_log_msg") if loc else "기록된 로그가 없습니다."
+            messagebox.showinfo(title, msg, parent=parent)
+            return
+
+        with open(file_path, "w", encoding="utf-8-sig", newline="") as f_out:
             writer = csv.writer(f_out)
             writer.writerow(["Timestamp", "Duration (min)", "Task", "Status"])
             
-            for line in f_in:
-                line = line.strip()
-                if not line: continue
-                
-                try:
-                    data = json.loads(line)
-                    writer.writerow([
-                        data.get("timestamp", ""),
-                        data.get("duration", 25),
-                        data.get("task") or "",
-                        data.get("status", "success")
-                    ])
-                except json.JSONDecodeError:
-                    # 기존 텍스트 형식 파싱 (하위 호환성)
-                    if "]" in line:
-                        parts = line.split("]")
-                        timestamp = parts[0].strip("[")
-                        task = ""
-                        if "-" in parts[1]:
-                            task = parts[1].split("-", 1)[1].strip()
-                        writer.writerow([timestamp, 25, task, "success"])
-                    
-        messagebox.showinfo("완료", "CSV 내보내기가 완료되었습니다.", parent=parent)
+            for row in rows:
+                writer.writerow([row['timestamp'], row['duration'], row['task'] or "", row['status']])
+
+        title = loc.get("done") if loc else "완료"
+        msg = loc.get("export_success_msg") if loc else "CSV 내보내기가 완료되었습니다."
+        messagebox.showinfo(title, msg, parent=parent)
     except Exception as e:
-        messagebox.showerror("오류", f"내보내기 실패: {e}", parent=parent)
+        title = loc.get("error") if loc else "오류"
+        msg = loc.get("export_fail_fmt", error=e) if loc else f"내보내기 실패: {e}"
+        messagebox.showerror(title, msg, parent=parent)
+
+def import_csv(parent, loc=None):
+    """CSV 파일에서 로그 데이터를 읽어 DB에 복원합니다."""
+    file_path = filedialog.askopenfilename(
+        parent=parent,
+        filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        title=loc.get("import_csv_title") if loc else "CSV 데이터 가져오기"
+    )
+
+    if not file_path:
+        return
+
+    success_count = 0
+    skipped_count = 0
+
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        
+        with open(file_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            
+            for row in reader:
+                try:
+                    ts = row.get("Timestamp")
+                    dur = row.get("Duration (min)")
+                    task = row.get("Task")
+                    status = row.get("Status", "success")
+                    
+                    if ts and dur:
+                        # 날짜 형식 유효성 검사 (YYYY-MM-DD HH:MM:SS)
+                        datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                        
+                        c.execute("INSERT OR IGNORE INTO logs (timestamp, event, duration, task, status) VALUES (?, ?, ?, ?, ?)", 
+                                  (ts, "godmode_complete", int(dur), task, status))
+                        
+                        if c.rowcount > 0:
+                            success_count += 1
+                        else:
+                            skipped_count += 1
+                except (ValueError, sqlite3.Error):
+                    continue
+        
+        conn.commit()
+        conn.close()
+
+        title = loc.get("done") if loc else "완료"
+        msg_fmt = loc.get("import_success_msg") if loc else "데이터 복원 완료 (성공: {success}, 중복: {skipped})"
+        msg = msg_fmt.format(success=success_count, skipped=skipped_count)
+        messagebox.showinfo(title, msg, parent=parent)
+        
+    except Exception as e:
+        title = loc.get("error") if loc else "오류"
+        msg_fmt = loc.get("import_fail_fmt", error=str(e)) if loc else f"복원 실패: {e}"
+        messagebox.showerror(title, msg_fmt, parent=parent)
 
 def show_toast(title, message):
     """Windows 10/11 알림 센터에 토스트 메시지를 띄웁니다. (WinRT 사용)"""
@@ -149,116 +252,165 @@ def show_toast(title, message):
     except Exception as e:
         print(f"⚠️ 알림 전송 실패: {e}")
 
+def delete_log(target_timestamp):
+    """특정 타임스탬프의 로그를 DB에서 삭제합니다."""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("DELETE FROM logs WHERE timestamp = ?", (target_timestamp,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+def update_log(target_timestamp, new_task_name):
+    """특정 타임스탬프의 로그(작업명)를 DB에서 수정합니다."""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("UPDATE logs SET task = ? WHERE timestamp = ?", (new_task_name, target_timestamp))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+def clear_all_logs():
+    """DB의 모든 로그 데이터를 삭제합니다."""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("DELETE FROM logs")
+        conn.commit()
+        c.execute("VACUUM")
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
 def parse_logs(days=30):
-    """로그 파일을 읽어 최근 N일간의 날짜별 집중 횟수와 시간을 계산합니다."""
-    log_path = get_user_data_path("godmode_log.txt")
-    if not os.path.exists(log_path):
-        return {}
-    
+    """DB를 읽어 최근 N일간의 날짜별 집중 횟수와 시간을 계산합니다."""
     # 기준 날짜 설정 (오늘로부터 days일 전)
     cutoff_date = datetime.now() - timedelta(days=days)
-    cutoff_date = cutoff_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    cutoff_str = cutoff_date.strftime("%Y-%m-%d %H:%M:%S")
 
     daily_stats = {}
     try:
-        with open(log_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line: continue
-                
-                timestamp_str = None
-                duration = 25
-                status = "success"
-                task_name = None
-                
-                # 1. JSON 파싱 시도
-                try:
-                    entry = json.loads(line)
-                    timestamp_str = entry.get("timestamp")
-                    duration = entry.get("duration", 25)
-                    status = entry.get("status", "success")
-                    task_name = entry.get("task")
-                except json.JSONDecodeError:
-                    # 2. 기존 텍스트 형식 파싱 (하위 호환성)
-                    if "]" in line:
-                        parts = line.split("]")
-                        timestamp_str = parts[0].strip("[")
-                        if len(parts) > 1 and "-" in parts[1]:
-                            task_name = parts[1].split("-", 1)[1].strip()
-                
-                if timestamp_str:
-                    try:
-                        dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-                        if dt < cutoff_date:
-                            continue
+        conn = get_db_connection()
+        c = conn.cursor()
+        
+        # 날짜별 그룹화 쿼리 (SQLite substr 사용)
+        # timestamp 형식: YYYY-MM-DD HH:MM:SS
+        # substr(timestamp, 1, 10) -> YYYY-MM-DD
+        query = """
+            SELECT 
+                substr(timestamp, 1, 10) as date_key,
+                COUNT(*) as count,
+                SUM(duration) as total_duration
+            FROM logs 
+            WHERE timestamp >= ? AND status = 'success'
+            GROUP BY date_key
+        """
+        c.execute(query, (cutoff_str,))
+        rows = c.fetchall()
+        conn.close()
 
-                        date_key = dt.strftime("%Y-%m-%d")
-                        
-                        if date_key not in daily_stats:
-                            daily_stats[date_key] = {'count': 0, 'duration': 0, 'tasks': []}
-                        
-                        if status == "success":
-                            daily_stats[date_key]['count'] += 1
-                            daily_stats[date_key]['duration'] += int(duration)
-                            if task_name:
-                                daily_stats[date_key]['tasks'].append(task_name)
-                    except ValueError:
-                        continue
+        for row in rows:
+            date_key = row['date_key']
+            daily_stats[date_key] = {
+                'count': row['count'],
+                'duration': row['total_duration'] if row['total_duration'] else 0,
+                'tasks': [] # 호환성을 위해 빈 리스트 유지
+            }
     except Exception:
         pass
     return daily_stats
 
+def get_task_stats(days=30, date_filter=None):
+    """DB에서 작업별 통계를 집계하여 반환합니다."""
+    cutoff_date = datetime.now() - timedelta(days=days)
+    cutoff_str = cutoff_date.strftime("%Y-%m-%d %H:%M:%S")
+    
+    task_stats = []
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        
+        if date_filter:
+            # 특정 날짜 필터링 (date_filter: YYYY-MM-DD)
+            query = """
+                SELECT task, SUM(duration) as total_duration
+                FROM logs 
+                WHERE timestamp >= ? AND status = 'success' AND substr(timestamp, 1, 10) = ?
+                GROUP BY task
+                ORDER BY total_duration DESC
+            """
+            c.execute(query, (cutoff_str, date_filter))
+        else:
+            # 전체 기간
+            query = """
+                SELECT task, SUM(duration) as total_duration
+                FROM logs 
+                WHERE timestamp >= ? AND status = 'success'
+                GROUP BY task
+                ORDER BY total_duration DESC
+            """
+            c.execute(query, (cutoff_str,))
+            
+        rows = c.fetchall()
+        conn.close()
+        
+        total_sum = sum(row['total_duration'] for row in rows)
+        
+        for row in rows:
+            task = row['task'] or "-"
+            duration = row['total_duration']
+            pct = (duration / total_sum * 100) if total_sum > 0 else 0
+            task_stats.append((task, duration, pct))
+            
+    except Exception:
+        pass
+    return task_stats
+
 def get_recent_logs(days=30):
-    """최근 N일간의 로그 기록을 파싱하여 반환합니다 (최신순)."""
-    log_path = get_user_data_path("godmode_log.txt")
+    """최근 N일간의 로그 기록을 DB에서 조회하여 반환합니다 (최신순)."""
     logs = []
     has_more = False
-    if not os.path.exists(log_path):
-        return logs, has_more
     
     cutoff_date = datetime.now() - timedelta(days=days)
+    cutoff_str = cutoff_date.strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        with open(log_path, "r", encoding="utf-8") as f:
-            # 파일 전체를 읽어서 역순으로 처리
-            lines = f.readlines()
-            for line in reversed(lines):
-                line = line.strip()
-                if not line: continue
-                
-                timestamp_str = None
-                duration = 25
-                task_name = "-"
-                
-                try:
-                    entry = json.loads(line)
-                    timestamp_str = entry.get("timestamp")
-                    duration = int(entry.get("duration", 25))
-                    task_name = entry.get("task") or "-"
-                except json.JSONDecodeError:
-                    if "]" in line:
-                        parts = line.split("]")
-                        timestamp_str = parts[0].strip("[")
-                        if len(parts) > 1 and "-" in parts[1]:
-                            task_name = parts[1].split("-", 1)[1].strip()
-                
-                if timestamp_str:
-                    try:
-                        end_dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-                        # 기준 날짜보다 오래된 기록이 나오면 중단 (역순 탐색이므로 이후는 모두 과거 데이터)
-                        if end_dt < cutoff_date:
-                            has_more = True
-                            break
+        conn = get_db_connection()
+        c = conn.cursor()
+        
+        # 1. 범위 내 로그 조회
+        c.execute("SELECT * FROM logs WHERE timestamp >= ? ORDER BY timestamp DESC", (cutoff_str,))
+        rows = c.fetchall()
+        
+        # 2. 더 오래된 로그가 있는지 확인 (has_more)
+        c.execute("SELECT 1 FROM logs WHERE timestamp < ? LIMIT 1", (cutoff_str,))
+        has_more = c.fetchone() is not None
+        
+        conn.close()
 
-                        start_dt = end_dt - timedelta(minutes=duration)
-                        logs.append({
-                            "start": start_dt,
-                            "end": end_dt,
-                            "duration": duration,
-                            "task": task_name
-                        })
-                    except ValueError:
-                        continue
+        for row in rows:
+            try:
+                end_dt = datetime.strptime(row['timestamp'], "%Y-%m-%d %H:%M:%S")
+                duration = int(row['duration'])
+                start_dt = end_dt - timedelta(minutes=duration)
+                
+                logs.append({
+                    "start": start_dt,
+                    "end": end_dt,
+                    "duration": duration,
+                    "task": row['task'] or "-",
+                    "timestamp_str": row['timestamp']
+                })
+            except ValueError:
+                continue
     except Exception:
         pass
     return logs, has_more
