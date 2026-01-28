@@ -155,6 +155,59 @@ def show_toast(title, message):
     except Exception as e:
         print(f"⚠️ 알림 전송 실패: {e}")
 
+def delete_log(target_timestamp):
+    """특정 타임스탬프의 로그를 삭제합니다."""
+    log_path = get_user_data_path("godmode_log.txt")
+    if not os.path.exists(log_path):
+        return False
+    
+    try:
+        lines = []
+        with open(log_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        
+        with open(log_path, "w", encoding="utf-8") as f:
+            for line in lines:
+                if target_timestamp in line:
+                    continue
+                f.write(line)
+        return True
+    except Exception:
+        return False
+
+def update_log(target_timestamp, new_task_name):
+    """특정 타임스탬프의 로그(작업명)를 수정합니다."""
+    log_path = get_user_data_path("godmode_log.txt")
+    if not os.path.exists(log_path):
+        return False
+    
+    try:
+        lines = []
+        with open(log_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        
+        with open(log_path, "w", encoding="utf-8") as f:
+            for line in lines:
+                if target_timestamp in line:
+                    try:
+                        entry = json.loads(line)
+                        entry["task"] = new_task_name
+                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    except json.JSONDecodeError:
+                        # 기존 텍스트 형식인 경우 JSON으로 변환하여 저장 (호환성 유지)
+                        if "]" in line:
+                            # 타임스탬프는 유지하고 작업명만 변경
+                            # duration 등은 알 수 없으므로 기본값 사용
+                            entry = {"timestamp": target_timestamp, "event": "godmode_complete", "duration": 25, "task": new_task_name, "status": "success"}
+                            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                        else:
+                            f.write(line)
+                else:
+                    f.write(line)
+        return True
+    except Exception:
+        return False
+
 def parse_logs(days=30):
     """로그 파일을 읽어 최근 N일간의 날짜별 집중 횟수와 시간을 계산합니다."""
     log_path = get_user_data_path("godmode_log.txt")
@@ -261,7 +314,8 @@ def get_recent_logs(days=30):
                             "start": start_dt,
                             "end": end_dt,
                             "duration": duration,
-                            "task": task_name
+                            "task": task_name,
+                            "timestamp_str": timestamp_str
                         })
                     except ValueError:
                         continue

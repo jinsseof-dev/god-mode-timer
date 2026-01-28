@@ -118,7 +118,10 @@ def open_settings_window(app):
     btn_en.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(int(3*sf), int(3*sf)))
 
     btn_ja = tk.Button(lang_frame, text=app.loc.get("lang_ja"), font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
-    btn_ja.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(int(2*sf), 0))
+    btn_ja.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(int(2*sf), int(2*sf)))
+
+    btn_zh = tk.Button(lang_frame, text=app.loc.get("lang_zh", default="🇨🇳 中文"), font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
+    btn_zh.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(int(2*sf), 0))
 
     def update_lang_radio_style():
         val = var_lang.get()
@@ -126,6 +129,7 @@ def open_settings_window(app):
         btn_ko.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
         btn_en.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
         btn_ja.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
+        btn_zh.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
         
         # 선택된 버튼만 활성 스타일로 변경
         if val == "ko":
@@ -134,6 +138,8 @@ def open_settings_window(app):
             btn_en.configure(bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"])
         elif val == "ja":
             btn_ja.configure(bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"])
+        elif val == "zh":
+            btn_zh.configure(bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"])
             
     update_lang_radio_style()
     
@@ -144,6 +150,7 @@ def open_settings_window(app):
     btn_ko.configure(command=lambda: set_lang("ko"))
     btn_en.configure(command=lambda: set_lang("en"))
     btn_ja.configure(command=lambda: set_lang("ja"))
+    btn_zh.configure(command=lambda: set_lang("zh"))
 
     # 테마 선택
     tk.Label(grp_display, text=app.loc.get("theme_label"), font=lbl_font, bg=bg_color, fg=fg_color).pack(anchor="w", padx=int(15*sf), pady=(int(5*sf), 0))
