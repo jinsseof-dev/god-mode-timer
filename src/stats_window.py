@@ -1,8 +1,11 @@
 import tkinter as tk
 import tkinter.font as tkfont
 import math
+import os
+import sys
 from datetime import datetime, timedelta
 from utils import export_csv, get_recent_logs, get_side_position, parse_logs, delete_log, update_log, get_task_stats
+from common import get_user_data_path
 import traceback
 
 def open_stats_window(app):

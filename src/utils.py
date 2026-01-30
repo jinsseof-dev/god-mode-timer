@@ -163,61 +163,6 @@ def export_csv(parent, loc=None):
         msg = loc.get("export_fail_fmt", error=e) if loc else f"내보내기 실패: {e}"
         messagebox.showerror(title, msg, parent=parent)
 
-def import_csv(parent, loc=None):
-    """CSV 파일에서 로그 데이터를 읽어 DB에 복원합니다."""
-    file_path = filedialog.askopenfilename(
-        parent=parent,
-        filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-        title=loc.get("import_csv_title") if loc else "CSV 데이터 가져오기"
-    )
-
-    if not file_path:
-        return
-
-    success_count = 0
-    skipped_count = 0
-
-    try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        
-        with open(file_path, "r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            
-            for row in reader:
-                try:
-                    ts = row.get("Timestamp")
-                    dur = row.get("Duration (min)")
-                    task = row.get("Task")
-                    status = row.get("Status", "success")
-                    
-                    if ts and dur:
-                        # 날짜 형식 유효성 검사 (YYYY-MM-DD HH:MM:SS)
-                        datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
-                        
-                        c.execute("INSERT OR IGNORE INTO logs (timestamp, event, duration, task, status) VALUES (?, ?, ?, ?, ?)", 
-                                  (ts, "godmode_complete", int(dur), task, status))
-                        
-                        if c.rowcount > 0:
-                            success_count += 1
-                        else:
-                            skipped_count += 1
-                except (ValueError, sqlite3.Error):
-                    continue
-        
-        conn.commit()
-        conn.close()
-
-        title = loc.get("done") if loc else "완료"
-        msg_fmt = loc.get("import_success_msg") if loc else "데이터 복원 완료 (성공: {success}, 중복: {skipped})"
-        msg = msg_fmt.format(success=success_count, skipped=skipped_count)
-        messagebox.showinfo(title, msg, parent=parent)
-        
-    except Exception as e:
-        title = loc.get("error") if loc else "오류"
-        msg_fmt = loc.get("import_fail_fmt", error=str(e)) if loc else f"복원 실패: {e}"
-        messagebox.showerror(title, msg_fmt, parent=parent)
-
 def show_toast(title, message):
     """Windows 10/11 알림 센터에 토스트 메시지를 띄웁니다. (WinRT 사용)"""
     if sys.platform != "win32":

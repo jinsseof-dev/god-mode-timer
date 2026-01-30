@@ -46,6 +46,8 @@ class GodModeApp:
         self.window_y = None
         self.settings_window_x = None
         self.settings_window_y = None
+        self.settings_window_w = None
+        self.settings_window_h = None
         self.stats_window_x = None
         self.stats_window_y = None
         self.stats_window_w = None
@@ -919,6 +921,8 @@ class GodModeApp:
                 self.window_y = data.get("window_y")
                 self.settings_window_x = data.get("settings_window_x")
                 self.settings_window_y = data.get("settings_window_y")
+                self.settings_window_w = data.get("settings_window_w")
+                self.settings_window_h = data.get("settings_window_h")
                 self.stats_window_x = data.get("stats_window_x")
                 self.stats_window_y = data.get("stats_window_y")
                 self.stats_window_w = data.get("stats_window_w")
@@ -951,6 +955,8 @@ class GodModeApp:
         self.setting_language = self.loc.get_system_language()
         self.settings_window_x = None
         self.settings_window_y = None
+        self.settings_window_w = None
+        self.settings_window_h = None
         self.stats_window_x = None
         self.stats_window_y = None
         self.stats_window_w = None
@@ -982,6 +988,8 @@ class GodModeApp:
             "window_y": self.root.winfo_y(),
             "settings_window_x": self.settings_window_x,
             "settings_window_y": self.settings_window_y,
+            "settings_window_w": getattr(self, "settings_window_w", None),
+            "settings_window_h": getattr(self, "settings_window_h", None),
             "stats_window_x": self.stats_window_x,
             "stats_window_y": self.stats_window_y,
             "stats_window_w": getattr(self, "stats_window_w", None),
