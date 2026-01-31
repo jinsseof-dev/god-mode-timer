@@ -28,7 +28,7 @@ class GodModeApp:
 
         # --- 상태 변수 및 설정 로드 (UI 스케일 계산 전 선행) ---
         self.load_env()
-        self.app_version = os.environ.get("VERSION", "v1.21")
+        self.app_version = os.environ.get("VERSION", "v1.22.0.0")
         self.is_running = False
         self.setting_always_on_top = True
         self.setting_auto_start = False
