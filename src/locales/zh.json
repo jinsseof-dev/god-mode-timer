@@ -112,8 +112,6 @@
     "clear_data_success_title": "数据已清除",
     "clear_data_success_msg": "所有日志已被删除。",
     "clear_data_fail_msg": "数据清除失败。",
-    "import_csv_btn": "导入数据",
-    "import_csv_title": "导入数据 (CSV)",
-    "import_success_msg": "数据恢复完成。\n(成功: {success}, 跳过: {skipped})",
-    "import_fail_fmt": "数据恢复失败:\n{error}"
+    "data_settings_group": "数据管理",
+    "open_data_folder": "打开数据文件夹"
 }
