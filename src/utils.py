@@ -9,6 +9,7 @@ import csv
 from tkinter import filedialog, messagebox
 import webbrowser
 import sqlite3
+import math
 
 def play_sound():
     """운영체제에 맞는 알림음을 재생합니다 (시스템 비프음 사용)."""
@@ -272,6 +273,50 @@ def parse_logs(days=30):
     except Exception:
         pass
     return daily_stats
+
+def get_gamification_stats():
+    """사용자의 레벨과 스트릭(연속 달성일) 정보를 반환합니다."""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+
+        # 1. 총 집중 시간 (레벨 계산용)
+        c.execute("SELECT SUM(duration) FROM logs WHERE status='success'")
+        res = c.fetchone()
+        total_duration = res[0] if res and res[0] else 0
+
+        # 2. 스트릭 계산 (최근 1년치 데이터만 조회)
+        c.execute("SELECT DISTINCT substr(timestamp, 1, 10) as date_key FROM logs WHERE status='success' ORDER BY date_key DESC LIMIT 365")
+        rows = c.fetchall()
+        dates = set(row[0] for row in rows)
+        
+        conn.close()
+
+        streak = 0
+        check_date = datetime.now().date()
+        date_str = check_date.strftime("%Y-%m-%d")
+
+        # 오늘 기록이 없으면 어제부터 확인 (오늘 안 했어도 스트릭이 끊기진 않음)
+        if date_str not in dates:
+            check_date -= timedelta(days=1)
+            date_str = check_date.strftime("%Y-%m-%d")
+        
+        # 과거로 거슬러 올라가며 연속된 날짜 확인
+        while date_str in dates:
+            streak += 1
+            check_date -= timedelta(days=1)
+            date_str = check_date.strftime("%Y-%m-%d")
+
+        # 레벨 계산 (공식: 1 + sqrt(총 분 / 25)) -> 25분(1회)=Lv2, 100분(4회)=Lv3
+        level = 1 + int(math.sqrt(total_duration / 25))
+
+        return {
+            'level': level,
+            'streak': streak,
+            'total_duration': total_duration
+        }
+    except Exception:
+        return {'level': 1, 'streak': 0, 'total_duration': 0}
 
 def get_task_stats(days=30, date_filter=None):
     """DB에서 작업별 통계를 집계하여 반환합니다."""

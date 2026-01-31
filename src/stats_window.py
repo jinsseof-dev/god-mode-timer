@@ -459,6 +459,10 @@ def open_stats_window(app):
             
             def save_edit(event=None):
                 new_task = var_task.get().strip()
+                if not new_task:
+                    tk.messagebox.showwarning(app.loc.get("warning"), app.loc.get("task_empty_msg", default="Task name cannot be empty."), parent=edit_win)
+                    return
+
                 if update_log(log['timestamp_str'], new_task):
                     # 데이터 리로드 및 UI 갱신
                     nonlocal daily_stats, logs

@@ -66,6 +66,7 @@
     "theme_label": "테마",
     "theme_light": "☀️ 라이트",
     "theme_dark": "🌙 다크",
+    "theme_system": "🖥️ 시스템",
     "always_on_top": "항상 위에 표시",
     "show_task_input": "할 일 입력창 표시",
     "opacity_label": "투명도",
@@ -112,6 +113,6 @@
     "clear_data_success_title": "데이터 삭제 완료",
     "clear_data_success_msg": "모든 로그가 삭제되었습니다.",
     "clear_data_fail_msg": "데이터 삭제에 실패했습니다.",
-    "open_data_folder": "데이터 폴더 열기",
-    "data_settings_group": "데이터 관리"
+    "data_settings_group": "데이터 관리",
+    "open_data_folder": "데이터 폴더 열기"
 }

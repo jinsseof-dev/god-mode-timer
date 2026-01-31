@@ -237,19 +237,27 @@ def open_settings_window(app):
     
     # 테마 선택 버튼 (커스텀 라디오 버튼)
     btn_light = tk.Button(theme_frame, text=app.loc.get("theme_light"), font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
-    btn_light.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, int(5*sf)))
+    btn_light.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, int(2*sf)))
     
     btn_dark = tk.Button(theme_frame, text=app.loc.get("theme_dark"), font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
-    btn_dark.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(int(5*sf), 0))
+    btn_dark.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(int(2*sf), int(2*sf)))
+
+    btn_system = tk.Button(theme_frame, text=app.loc.get("theme_system", default="🖥️ System"), font=lbl_font, bd=0, padx=int(10*sf), pady=int(6*sf))
+    btn_system.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(int(2*sf), 0))
 
     def update_radio_style():
         val = var_theme.get()
+        # 초기화
+        btn_light.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
+        btn_dark.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
+        btn_system.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
+        
         if val == "Light":
             btn_light.configure(bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"])
-            btn_dark.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
-        else:
-            btn_light.configure(bg=app.colors["btn_bg"], fg=app.colors["fg_sub"])
+        elif val == "Dark":
             btn_dark.configure(bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"])
+        elif val == "System":
+            btn_system.configure(bg=app.colors["start_btn_bg"], fg=app.colors["btn_fg"])
 
     update_radio_style()
 
@@ -309,6 +317,7 @@ def open_settings_window(app):
 
     btn_light.configure(command=lambda: set_theme("Light"))
     btn_dark.configure(command=lambda: set_theme("Dark"))
+    btn_system.configure(command=lambda: set_theme("System"))
 
     var_top = tk.BooleanVar(value=app.setting_always_on_top)
     create_chk(grp_display, app.loc.get("always_on_top"), var_top)
@@ -435,7 +444,7 @@ def open_settings_window(app):
             var_strict.set(False)
             var_opacity.set(1.0)
             var_ui_scale.set(100)
-            var_theme.set("Light")
+            var_theme.set("System")
             var_lang.set(app.loc.get_system_language())
             
             # 투명도 즉시 적용 (미리보기)

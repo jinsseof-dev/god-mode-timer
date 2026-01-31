@@ -1,12 +1,14 @@
 import tkinter as tk
 from tkinter import messagebox
-from utils import play_sound, log_godmode, show_toast, play_tick_sound, parse_logs
+from utils import play_sound, log_godmode, show_toast, play_tick_sound, parse_logs, get_gamification_stats
 from taskbar import WindowsTaskbar
 from common import resource_path, get_user_data_path
 from settings_window import open_settings_window
 from stats_window import open_stats_window
 from ad_window import show_ad_window
+from timer_engine import TimerEngine
 from localization import Localization
+# from sound_manager import WhiteNoisePlayer  # (구현 후 주석 해제)
 import time
 import math
 import sys
@@ -15,6 +17,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageTk
 import json
 import os
 from datetime import datetime
+import sys
 
 class GodModeApp:
     def __init__(self, root):
@@ -38,10 +41,13 @@ class GodModeApp:
         self.setting_strict_mode = False
         self.setting_opacity = 1.0
         self.setting_ui_scale = 100 # 사용자 UI 크기 설정 (%)
-        self.setting_theme = "Light"
+        self.setting_theme = "System"
         self.setting_language = self.loc.lang_code # 기본 언어 (시스템 언어)
+        self.setting_white_noise = None # "rain", "fire", etc.
         self.is_mini_mode = False
         
+        self.user_level = 1
+        self.user_streak = 0
         self.window_x = None
         self.window_y = None
         self.settings_window_x = None
@@ -55,6 +61,19 @@ class GodModeApp:
         self.stats_window = None
         self.last_scale = 1.0
         self.transition_job = None
+        
+        # DPI 변경 감지용 변수
+        self.last_dpi = self.get_current_dpi()
+        
+        # 타이머 엔진 초기화
+        self.engine = TimerEngine()
+        
+        # 시스템 테마 감지 초기화
+        self.system_theme = self.get_system_theme()
+        self.check_system_theme_loop()
+        
+        # 백색 소음 플레이어 초기화
+        # self.noise_player = WhiteNoisePlayer()
 
         self.load_settings()
         
@@ -102,11 +121,6 @@ class GodModeApp:
         self.update_opacity()
         self.root.configure(bg=self.colors["bg"])
         
-        self.work_time = self.setting_work_min * 60
-        self.break_time = self.setting_short_break_min * 60
-        self.current_time = self.work_time
-        self.mode = "work"  # 'work' or 'break'
-
         # 보조 버튼 프레임 (통계, 설정, 미니모드) - 하단 배치 (가장 먼저 pack하여 공간 확보)
         self.btn_frame = tk.Frame(root, bg=self.colors["bg"])
         self.btn_frame.pack(side=tk.BOTTOM, pady=(0, 15))
@@ -185,6 +199,34 @@ class GodModeApp:
         # 설정에 따라 할 일 입력창 표시 여부 결정
         self.update_task_input_visibility()
         self.update_control_buttons_visibility()
+
+    def get_system_theme(self):
+        """윈도우 레지스트리에서 시스템 테마(Light/Dark)를 확인합니다."""
+        if sys.platform != "win32":
+            return "Light"
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return "Light" if value == 1 else "Dark"
+        except Exception:
+            return "Light"
+
+    def check_system_theme_loop(self):
+        """주기적으로 시스템 테마 변경을 감지합니다."""
+        if sys.platform == "win32":
+            new_theme = self.get_system_theme()
+            if self.setting_theme == "System" and new_theme != self.system_theme:
+                self.system_theme = new_theme
+                self.transition_theme("System")
+            self.system_theme = new_theme
+        self.root.after(2000, self.check_system_theme_loop)
+
+    def get_current_dpi(self):
+        try:
+            return self.root.winfo_fpixels('1i')
+        except Exception:
+            return 96.0
 
     def load_env(self):
         """프로젝트 루트의 .env 파일에서 환경 변수를 로드합니다."""
@@ -357,9 +399,9 @@ class GodModeApp:
         draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius), fill=self.colors["timer_bg"], outline=self.colors["timer_outline"], width=outline_width)
         
         # 1. 남은 시간 영역 그리기
-        display_time = min(self.current_time, 3600)
+        display_time = min(self.engine.current_time, 3600)
         angle = (display_time / 3600) * 360
-        color = "#FF5252" if self.mode == "work" else "#4CAF50"
+        color = "#FF5252" if self.engine.mode == "work" else "#4CAF50"
         
         if display_time >= 3600:
             draw.ellipse((cx-arc_radius, cy-arc_radius, cx+arc_radius, cy+arc_radius), fill=color, outline=color)
@@ -403,7 +445,7 @@ class GodModeApp:
         center_radius = radius * 0.22
         draw.ellipse((cx-center_radius, cy-center_radius, cx+center_radius, cy+center_radius), fill=self.colors["timer_center"])
         
-        mins, secs = divmod(int(self.current_time), 60)
+        mins, secs = divmod(int(self.engine.current_time), 60)
         time_str = "{:02d}:{:02d}".format(mins, secs)
         
         font_size_time = max(18, int(radius * 0.14))
@@ -415,7 +457,7 @@ class GodModeApp:
         if not self.is_mini_mode:
             cycle_len = self.setting_long_break_interval
             # 현재 사이클 내 완료 횟수 계산
-            if self.mode == "break" and self.today_count > 0 and self.today_count % cycle_len == 0:
+            if self.engine.mode == "break" and self.today_count > 0 and self.today_count % cycle_len == 0:
                 # 롱 브레이크 중일 때는 꽉 찬 상태로 표시
                 current_cycle_count = cycle_len
             else:
@@ -442,6 +484,20 @@ class GodModeApp:
                 
                 draw.ellipse((dx - dot_radius, dot_y - dot_radius, dx + dot_radius, dot_y + dot_radius), 
                              fill=fill_color, outline=outline_color, width=dot_outline_width)
+
+        # 7. 게이미피케이션 정보 (레벨 & 스트릭) - 상단 좌우 배치
+        if not self.is_mini_mode:
+            stats_font_size = int(14 * supersample * ui_scale) # 화면상 약 14pt
+            stats_font = self.load_font(stats_font_size, bold=True)
+            
+            pad = 20 * supersample * ui_scale
+            
+            # Lv 표시 (좌측 상단)
+            draw.text((pad, pad), f"Lv.{self.user_level}", font=stats_font, fill=self.colors["fg"], anchor="lt")
+            
+            # Streak 표시 (우측 상단)
+            if self.user_streak > 0:
+                draw.text((img_w - pad, pad), f"🔥 {self.user_streak}", font=stats_font, fill=self.colors["fg"], anchor="rt")
         
         # 이미지 리사이즈 (안티앨리어싱) 및 캔버스에 표시
         image = image.resize((w, h), resample=Image.BILINEAR)
@@ -449,8 +505,8 @@ class GodModeApp:
         self.canvas.create_image(0, 0, image=self.tk_image, anchor=tk.NW)
 
         # 윈도우 타이틀 업데이트
-        if self.is_running:
-            mins, secs = divmod(int(self.current_time), 60)
+        if self.engine.is_running:
+            mins, secs = divmod(int(self.engine.current_time), 60)
             time_str = "{:02d}:{:02d}".format(mins, secs)
             app_title = self.loc.get("app_title")
             new_title = f"{time_str} - {app_title}"
@@ -458,8 +514,8 @@ class GodModeApp:
                 self.root.title(new_title)
             
             # 작업 표시줄 진행률 업데이트
-            total_time = self.work_time if self.mode == "work" else self.break_time
-            self.taskbar.set_progress(self.current_time, total_time)
+            total_time = self.engine.target_duration
+            self.taskbar.set_progress(self.engine.current_time, total_time)
         elif self.root.title() != self.loc.get("app_title"):
             self.root.title(self.loc.get("app_title"))
             self.taskbar.reset()
@@ -604,13 +660,11 @@ class GodModeApp:
 
     def skip_break(self):
         """휴식을 건너뛰고 즉시 집중 모드로 전환합니다."""
-        if self.mode != "break": return
+        if self.engine.mode != "break": return
         
-        self.mode = "work"
-        self.current_time = self.work_time
+        self.engine.skip_break()
         
         # 타이머를 즉시 시작하지 않고 대기 상태로 전환
-        self.is_running = False
         self.update_topmost_status()
         
         self.update_start_button_color()
@@ -623,13 +677,10 @@ class GodModeApp:
 
     def repeat_break(self):
         """휴식을 반복합니다 (현재 집중 모드 대기 상태에서 다시 휴식 모드로 전환)."""
-        if self.mode != "work": return
+        if self.engine.mode != "work": return
         
-        self.mode = "break"
-        self.current_time = self.break_time
-        
-        was_running = self.is_running
-        self.is_running = True
+        was_running = self.engine.is_running
+        self.engine.repeat_break(self.today_count)
         self.update_topmost_status()
         self.last_time = time.time()
         
@@ -645,9 +696,9 @@ class GodModeApp:
             self.count_down()
 
     def toggle_timer(self):
-        if self.is_running:
+        if self.engine.is_running:
             # 엄격 모드 체크 (집중 모드일 때만)
-            if self.mode == "work" and self.setting_strict_mode:
+            if self.engine.mode == "work" and self.setting_strict_mode:
                 show_toast(self.loc.get("strict_mode_title"), self.loc.get("strict_mode_msg"))
                 return
 
@@ -655,34 +706,31 @@ class GodModeApp:
             self.reset_timer()
         else:
             # 정지 상태면 시작
-            self.is_running = True
+            self.engine.start()
             self.update_topmost_status()
             self.update_start_button_color()
             self.update_control_buttons_visibility()
             self.disable_settings_button()
             self.disable_task_entry()
             
-            if self.mode == "work":
+            if self.engine.mode == "work":
                 show_toast(self.loc.get("focus_start_title"), self.loc.get("focus_start_msg"))
             else:
                 show_toast(self.loc.get("break_start_title"), self.loc.get("break_start_msg"))
+            
+            # 집중 모드 시작 시 백색 소음 재생 (설정되어 있다면)
+            # if self.engine.mode == "work" and self.setting_white_noise:
+            #     self.noise_player.play(self.setting_white_noise)
             
             self.last_time = time.time()
             self.count_down()
 
     def count_down(self):
-        if self.is_running and self.current_time > 0:
-            now = time.time()
-            elapsed = now - self.last_time
-            self.last_time = now
-            
-            self.current_time -= elapsed
-            if self.current_time < 0: self.current_time = 0
-            
+        if self.engine.tick():
+            self.finish_cycle()
+        elif self.engine.is_running:
             self.draw_timer()
             self.root.after(50, self.count_down)
-        elif self.current_time <= 0 and self.is_running:
-            self.finish_cycle()
 
     def finish_cycle(self):
         # 윈도우를 맨 앞으로 가져오기
@@ -690,7 +738,7 @@ class GodModeApp:
         if self.setting_sound:
             play_sound()
         
-        if self.mode == "work":
+        if self.engine.mode == "work":
             task_content = self.task_var.get()
             if task_content == self.task_placeholder:
                 task_content = None
@@ -701,25 +749,25 @@ class GodModeApp:
             self.on_task_focus_out(None) # 플레이스홀더 복구
             
             self.refresh_today_count()
-            self.mode = "break"
+            
+            # 휴식 모드로 전환 (긴 휴식 여부 판단)
+            is_long_break = self.engine.switch_to_break(self.today_count)
+            
+            # 휴식 시간에는 백색 소음 중지
+            # self.noise_player.stop()
             
             # 집중 완료 시 광고(후원) 팝업 표시 (2회마다)
             if self.today_count > 0 and self.today_count % 2 == 0:
                 show_ad_window(self)
             
-            # 4번 집중(4의 배수)마다 15분 긴 휴식
-            if self.today_count > 0 and self.today_count % self.setting_long_break_interval == 0:
-                self.break_time = self.setting_long_break_min * 60
+            if is_long_break:
                 msg = self.loc.get("long_break_msg_fmt", interval=self.setting_long_break_interval, count=self.today_count, min=self.setting_long_break_min)
             else:
-                self.break_time = self.setting_short_break_min * 60
                 msg = self.loc.get("short_break_msg")
-            
-            self.current_time = self.break_time
             
             if self.setting_auto_start:
                 show_toast(self.loc.get("focus_complete_title"), msg + " " + self.loc.get("auto_start_suffix"))
-                self.is_running = True
+                self.engine.start()
                 self.update_topmost_status()
                 self.update_start_button_color()
                 self.update_control_buttons_visibility()
@@ -728,7 +776,6 @@ class GodModeApp:
                 self.root.after(50, self.count_down)
             else:
                 show_toast(self.loc.get("focus_complete_title"), msg)
-                self.is_running = False
                 self.update_topmost_status()
                 self.update_control_buttons_visibility()
                 self.enable_settings_button()
@@ -736,12 +783,11 @@ class GodModeApp:
                 self.update_start_button_color()
                 self.draw_timer()
         else:
-            self.mode = "work"
-            self.current_time = self.work_time
+            self.engine.switch_to_work()
             
             if self.setting_auto_start:
                 show_toast(self.loc.get("break_complete_title"), self.loc.get("break_complete_auto_start_msg"))
-                self.is_running = True
+                self.engine.start()
                 self.update_topmost_status()
                 self.update_start_button_color()
                 self.last_time = time.time()
@@ -749,7 +795,6 @@ class GodModeApp:
                 self.root.after(50, self.count_down)
             else:
                 show_toast(self.loc.get("break_complete_title"), self.loc.get("break_complete_msg"))
-                self.is_running = False
                 self.update_topmost_status()
                 self.update_control_buttons_visibility()
                 self.enable_settings_button()
@@ -758,23 +803,20 @@ class GodModeApp:
                 self.draw_timer()
 
     def reset_timer(self):
-        self.is_running = False
+        self.engine.reset()
         self.update_topmost_status()
         self.enable_settings_button()
         self.enable_task_entry()
         self.update_start_button_color()
-        self.work_time = self.setting_work_min * 60
         
-        if self.mode == "work":
-            self.current_time = self.work_time
-        else:
-            self.current_time = self.break_time
-            
+        # 타이머 리셋 시 소음 중지
+        # if hasattr(self, 'noise_player'): self.noise_player.stop()
+        
         self.update_control_buttons_visibility()
         self.draw_timer()
 
     def update_start_button_color(self):
-        if self.is_running:
+        if self.engine.is_running:
             self.start_button.config(image=self.icon_stop, bg=self.colors["stop_btn_bg"])
         else:
             self.start_button.config(image=self.icon_play, bg=self.colors["start_btn_bg"])
@@ -783,9 +825,9 @@ class GodModeApp:
         self.skip_button.pack_forget()
         self.repeat_button.pack_forget()
         
-        if self.mode == "break":
+        if self.engine.mode == "break":
             self.skip_button.pack(side=tk.LEFT, padx=2)
-        elif self.mode == "work" and not self.is_running:
+        elif self.engine.mode == "work" and not self.engine.is_running:
             self.repeat_button.pack(side=tk.LEFT, padx=2)
 
     def enable_settings_button(self):
@@ -811,7 +853,7 @@ class GodModeApp:
             self.task_entry.config(fg=self.colors["fg_sub"])
 
     def on_task_return(self, event):
-        if not self.is_running:
+        if not self.engine.is_running:
             self.root.focus_set()
             self.toggle_timer()
 
@@ -824,7 +866,7 @@ class GodModeApp:
 
     def handle_mouse_input(self, event):
         self.root.focus_set()
-        if self.is_running:
+        if self.engine.is_running:
             return
 
         w = self.canvas.winfo_width()
@@ -850,48 +892,36 @@ class GodModeApp:
         minutes = round(angle / 6 / 5) * 5
         if minutes == 0: minutes = 60
         
-        if self.mode == "work":
-            if self.setting_work_min != minutes and self.setting_sound:
+        # 현재 설정된 시간과 다를 때만 업데이트 (소리 재생)
+        current_setting_min = round(self.engine.target_duration / 60)
+        if current_setting_min != minutes:
+            if self.setting_sound:
                 play_tick_sound()
-            self.setting_work_min = minutes
-            self.work_time = minutes * 60
-            self.current_time = self.work_time
-        else:
-            current_break_min = round(self.break_time / 60)
-            if current_break_min != minutes and self.setting_sound:
-                play_tick_sound()
-            self.break_time = minutes * 60
-            self.current_time = self.break_time
+            self.engine.set_duration(minutes)
+            # GUI 설정 변수 동기화 (저장용)
+            if self.engine.mode == "work":
+                self.setting_work_min = minutes
         
         self.draw_timer()
 
     def handle_mouse_wheel(self, event):
-        if self.is_running:
+        if self.engine.is_running:
             return
             
         # 5분 단위 증감
         step = 5 if event.delta > 0 else -5
         
-        if self.mode == "work":
-            new_min = self.setting_work_min + step
-            new_min = max(5, min(60, new_min))
-            
-            if self.setting_work_min != new_min:
-                if self.setting_sound:
-                    play_tick_sound()
+        current_min = round(self.engine.target_duration / 60)
+        new_min = current_min + step
+        new_min = max(5, min(60, new_min))
+        
+        if current_min != new_min:
+            if self.setting_sound:
+                play_tick_sound()
+            self.engine.set_duration(new_min)
+            # GUI 설정 변수 동기화 (저장용)
+            if self.engine.mode == "work":
                 self.setting_work_min = new_min
-                self.work_time = new_min * 60
-                self.current_time = self.work_time
-        else:
-            current_break_min = round(self.break_time / 60)
-            new_min = current_break_min + step
-            new_min = max(5, min(60, new_min))
-            
-            if current_break_min != new_min:
-                if self.setting_sound:
-                    play_tick_sound()
-                self.break_time = new_min * 60
-                self.current_time = self.break_time
         
         self.draw_timer()
 
@@ -915,7 +945,7 @@ class GodModeApp:
                 self.setting_strict_mode = data.get("strict_mode", False)
                 self.setting_opacity = data.get("opacity", 1.0)
                 self.setting_ui_scale = data.get("ui_scale", 100)
-                self.setting_theme = data.get("theme", "Light")
+                self.setting_theme = data.get("theme", "System")
                 self.setting_language = data.get("language", self.loc.lang_code)
                 self.window_x = data.get("window_x")
                 self.window_y = data.get("window_y")
@@ -927,6 +957,15 @@ class GodModeApp:
                 self.stats_window_y = data.get("stats_window_y")
                 self.stats_window_w = data.get("stats_window_w")
                 self.stats_window_h = data.get("stats_window_h")
+            
+            # 엔진 설정 업데이트
+            self.engine.update_settings(
+                self.setting_work_min,
+                self.setting_short_break_min,
+                self.setting_long_break_min,
+                self.setting_long_break_interval,
+                self.setting_auto_start
+            )
         except Exception:
             self.restore_default_settings()
 
@@ -937,6 +976,11 @@ class GodModeApp:
         stats = daily_stats.get(today_str, {'count': 0, 'duration': 0})
         self.today_count = stats['count']
         self.today_duration = stats.get('duration', 0)
+        
+        # 게이미피케이션 스탯 갱신
+        game_stats = get_gamification_stats()
+        self.user_level = game_stats.get('level', 1)
+        self.user_streak = game_stats.get('streak', 0)
 
     def restore_default_settings(self):
         self.setting_always_on_top = True
@@ -951,7 +995,7 @@ class GodModeApp:
         self.setting_ui_scale = 100
         self.window_x = None
         self.window_y = None
-        self.setting_theme = "Light"
+        self.setting_theme = "System"
         self.setting_language = self.loc.get_system_language()
         self.settings_window_x = None
         self.settings_window_y = None
@@ -963,6 +1007,14 @@ class GodModeApp:
         self.stats_window_h = None
         self.save_settings_to_file()
         self.setting_opacity = 1.0
+        
+        self.engine.update_settings(
+            self.setting_work_min,
+            self.setting_short_break_min,
+            self.setting_long_break_min,
+            self.setting_long_break_interval,
+            self.setting_auto_start
+        )
         self.update_topmost_status()
         self.update_theme_colors()
         self.apply_theme()
@@ -1002,7 +1054,7 @@ class GodModeApp:
             pass
 
     def on_closing(self):
-        if self.is_running and self.mode == "work":
+        if self.engine.is_running and self.engine.mode == "work":
             show_toast(self.loc.get("focus_mode_title"), self.loc.get("strict_mode_exit_msg"))
             return
         self.save_settings_to_file()
@@ -1046,8 +1098,20 @@ class GodModeApp:
 
     def on_window_configure(self, event):
         if event.widget == self.root:
+            self.check_dpi_change()
             self.snap_to_edge(event)
             self.scale_ui()
+
+    def check_dpi_change(self):
+        """DPI 변경을 감지하고 스케일 팩터를 업데이트합니다."""
+        current_dpi = self.get_current_dpi()
+        if abs(current_dpi - self.last_dpi) > 1.0:
+            self.last_dpi = current_dpi
+            self.update_scale_factor()
+            # 통계 창이 열려있다면 크기 및 UI 업데이트
+            if hasattr(self, 'stats_window') and self.stats_window and self.stats_window.winfo_exists():
+                if hasattr(self.stats_window, 'refresh_ui_scale'):
+                    self.stats_window.refresh_ui_scale()
 
     def scale_ui(self):
         w = self.root.winfo_width()
@@ -1121,7 +1185,7 @@ class GodModeApp:
         """현재 상태에 따라 윈도우의 최상위 속성을 업데이트합니다."""
         if self.is_mini_mode:
             self.root.attributes('-topmost', True)
-        elif self.is_running and self.setting_always_on_top:
+        elif self.engine.is_running and self.setting_always_on_top:
             self.root.attributes('-topmost', True)
         else:
             self.root.attributes('-topmost', False)
@@ -1136,6 +1200,9 @@ class GodModeApp:
             self.task_frame.pack_forget()
 
     def get_theme_colors(self, theme):
+        if theme == "System":
+            theme = self.system_theme
+            
         if theme == "Dark":
             return {
                 "bg": "#212121",
@@ -1240,7 +1307,7 @@ class GodModeApp:
     def refresh_language(self):
         """UI에 표시된 모든 텍스트를 현재 언어 설정에 맞게 새로고침합니다."""
         # 1. 메인 윈도우 UI 업데이트
-        if not self.is_running:
+        if not self.engine.is_running:
             self.root.title(self.loc.get("app_title"))
         
         self.task_placeholder = self.loc.get("task_placeholder")
@@ -1267,9 +1334,13 @@ if __name__ == "__main__":
 
             # High DPI 설정
             try:
-                ctypes.windll.shcore.SetProcessDpiAwareness(1)
+                # Windows 8.1+ (Per-Monitor DPI Aware)
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
             except Exception:
-                ctypes.windll.user32.SetProcessDPIAware()
+                try:
+                    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+                except Exception:
+                    ctypes.windll.user32.SetProcessDPIAware()
         except Exception:
             pass
 
