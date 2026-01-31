@@ -112,8 +112,6 @@
     "clear_data_success_title": "Data Cleared",
     "clear_data_success_msg": "All logs have been deleted.",
     "clear_data_fail_msg": "Failed to clear data.",
-    "import_csv_btn": "Import Data",
-    "import_csv_title": "Import Data (CSV)",
-    "import_success_msg": "Data restore completed.\n(Success: {success}, Skipped: {skipped})",
-    "import_fail_fmt": "Failed to restore data:\n{error}"
+    "data_settings_group": "Data Management",
+    "open_data_folder": "Open Data Folder"
 }

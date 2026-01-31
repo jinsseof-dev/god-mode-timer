@@ -9,6 +9,7 @@ import csv
 from tkinter import filedialog, messagebox
 import webbrowser
 import sqlite3
+import math
 
 def play_sound():
     """운영체제에 맞는 알림음을 재생합니다 (시스템 비프음 사용)."""
@@ -163,61 +164,6 @@ def export_csv(parent, loc=None):
         msg = loc.get("export_fail_fmt", error=e) if loc else f"내보내기 실패: {e}"
         messagebox.showerror(title, msg, parent=parent)
 
-def import_csv(parent, loc=None):
-    """CSV 파일에서 로그 데이터를 읽어 DB에 복원합니다."""
-    file_path = filedialog.askopenfilename(
-        parent=parent,
-        filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-        title=loc.get("import_csv_title") if loc else "CSV 데이터 가져오기"
-    )
-
-    if not file_path:
-        return
-
-    success_count = 0
-    skipped_count = 0
-
-    try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        
-        with open(file_path, "r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            
-            for row in reader:
-                try:
-                    ts = row.get("Timestamp")
-                    dur = row.get("Duration (min)")
-                    task = row.get("Task")
-                    status = row.get("Status", "success")
-                    
-                    if ts and dur:
-                        # 날짜 형식 유효성 검사 (YYYY-MM-DD HH:MM:SS)
-                        datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
-                        
-                        c.execute("INSERT OR IGNORE INTO logs (timestamp, event, duration, task, status) VALUES (?, ?, ?, ?, ?)", 
-                                  (ts, "godmode_complete", int(dur), task, status))
-                        
-                        if c.rowcount > 0:
-                            success_count += 1
-                        else:
-                            skipped_count += 1
-                except (ValueError, sqlite3.Error):
-                    continue
-        
-        conn.commit()
-        conn.close()
-
-        title = loc.get("done") if loc else "완료"
-        msg_fmt = loc.get("import_success_msg") if loc else "데이터 복원 완료 (성공: {success}, 중복: {skipped})"
-        msg = msg_fmt.format(success=success_count, skipped=skipped_count)
-        messagebox.showinfo(title, msg, parent=parent)
-        
-    except Exception as e:
-        title = loc.get("error") if loc else "오류"
-        msg_fmt = loc.get("import_fail_fmt", error=str(e)) if loc else f"복원 실패: {e}"
-        messagebox.showerror(title, msg_fmt, parent=parent)
-
 def show_toast(title, message):
     """Windows 10/11 알림 센터에 토스트 메시지를 띄웁니다. (WinRT 사용)"""
     if sys.platform != "win32":
@@ -327,6 +273,50 @@ def parse_logs(days=30):
     except Exception:
         pass
     return daily_stats
+
+def get_gamification_stats():
+    """사용자의 레벨과 스트릭(연속 달성일) 정보를 반환합니다."""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+
+        # 1. 총 집중 시간 (레벨 계산용)
+        c.execute("SELECT SUM(duration) FROM logs WHERE status='success'")
+        res = c.fetchone()
+        total_duration = res[0] if res and res[0] else 0
+
+        # 2. 스트릭 계산 (최근 1년치 데이터만 조회)
+        c.execute("SELECT DISTINCT substr(timestamp, 1, 10) as date_key FROM logs WHERE status='success' ORDER BY date_key DESC LIMIT 365")
+        rows = c.fetchall()
+        dates = set(row[0] for row in rows)
+        
+        conn.close()
+
+        streak = 0
+        check_date = datetime.now().date()
+        date_str = check_date.strftime("%Y-%m-%d")
+
+        # 오늘 기록이 없으면 어제부터 확인 (오늘 안 했어도 스트릭이 끊기진 않음)
+        if date_str not in dates:
+            check_date -= timedelta(days=1)
+            date_str = check_date.strftime("%Y-%m-%d")
+        
+        # 과거로 거슬러 올라가며 연속된 날짜 확인
+        while date_str in dates:
+            streak += 1
+            check_date -= timedelta(days=1)
+            date_str = check_date.strftime("%Y-%m-%d")
+
+        # 레벨 계산 (공식: 1 + sqrt(총 분 / 25)) -> 25분(1회)=Lv2, 100분(4회)=Lv3
+        level = 1 + int(math.sqrt(total_duration / 25))
+
+        return {
+            'level': level,
+            'streak': streak,
+            'total_duration': total_duration
+        }
+    except Exception:
+        return {'level': 1, 'streak': 0, 'total_duration': 0}
 
 def get_task_stats(days=30, date_filter=None):
     """DB에서 작업별 통계를 집계하여 반환합니다."""

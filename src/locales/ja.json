@@ -112,8 +112,6 @@
     "clear_data_success_title": "データ削除完了",
     "clear_data_success_msg": "すべてのログが削除されました。",
     "clear_data_fail_msg": "データの削除に失敗しました。",
-    "import_csv_btn": "データ読み込み",
-    "import_csv_title": "データ読み込み (CSV)",
-    "import_success_msg": "データの復元が完了しました。\n(成功: {success}件, 重複/スキップ: {skipped}件)",
-    "import_fail_fmt": "データの復元に失敗しました:\n{error}"
+    "data_settings_group": "データ管理",
+    "open_data_folder": "データフォルダを開く"
 }
