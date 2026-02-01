@@ -1,14 +1,63 @@
-# 🍅 Python God-Mode Timer
+# 🍅 God-Mode Timer
 
 생산성 향상을 위한 심플한 파이썬 뽀모도로 타이머 프로젝트입니다.
 25분 집중, 5분 휴식 사이클을 기본으로 합니다.
 
-## 📊 개발 진척률 (Progress)
+God-Mode Timer is a productivity tool designed to help you focus and manage your time effectively using the Pomodoro technique.
 
-**현재 상태: 기능 확장 및 글로벌화 (v1.22.0.0)**
+---
+
+## 🚀 v2.0.0 Roadmap (Flutter Migration)
+
+**God-Mode Timer v2.0.0**은 **Flutter**로 재개발하여 크로스 플랫폼(Windows, macOS, Android, iOS)을 지원할 계획입니다.
+
+### 📅 Phase 1: 설계 및 코어 이식
+- [ ] **Project Structure**: Clean Architecture / MVVM 패턴 도입
+- [ ] **State Management**: Riverpod 적용
+- [ ] **Core Logic**: Python `TimerEngine`을 Dart로 포팅
+- [ ] **Data**: Drift (SQLite) 및 shared_preferences 적용
+
+### 🖥️ Phase 2: Windows 데스크톱 MVP (우선순위)
+- [ ] **Window Control**: Frameless, Always on Top, Snap, Mini Mode 구현
+- [ ] **UI**: CustomPainter 기반 고품질 렌더링
+- [ ] **Features**: 시스템 트레이, 작업 표시줄 진행률, 사운드
+
+### 📊 Phase 3: 통계 및 설정 고도화
+- [ ] **Charts**: `fl_chart` 기반 일간/주간 통계 시각화
+- [ ] **Localization**: `.arb` 파일을 이용한 다국어 지원
+- [ ] **Migration**: v1.x 데이터(DB/JSON) 가져오기 기능
+
+### 📱 Phase 4: 모바일 확장 (Android & iOS)
+- [ ] **Responsive Design**: 모바일/데스크톱 반응형 UI
+- [ ] **Background Timer**: Foreground Service(Android) 및 Live Activities(iOS)
+
+### 🍎 Phase 5: macOS 및 배포
+- [ ] **macOS**: 메뉴바 앱(Menu bar app) 지원
+- [ ] **CI/CD**: GitHub Actions 자동 빌드 파이프라인
+- [ ] **Distribution**: MSIX (Windows), Play Store, App Store 배포
+
+### 🛠️ Tech Stack (v2.0.0)
+
+| Category | Package | Description |
+| :--- | :--- | :--- |
+| **State Management** | `flutter_riverpod` | App state & timer logic |
+| **Database** | `drift` | Log storage & stats |
+| **Settings** | `shared_preferences` | User preferences |
+| **Window** | `window_manager` | Desktop window control |
+| **Tray** | `system_tray` | System tray icon |
+| **Taskbar** | `windows_taskbar` | Taskbar progress |
+| **Charts** | `fl_chart` | Statistics charts |
+| **Sound** | `audioplayers` | Notifications & White noise |
+| **Background** | `flutter_background_service` | Android background timer |
+
+---
+
+## 📊 v1.x 개발 진척률 (Progress)
+
+**현재 상태: 지속 가능성 및 v2.0 준비 (v1.23.0.0)**
 `[==========] 100%`
 
-## 📝 개발 할 일 (To-Do List)
+## 📝 v1.x 개발 일지 (History)
 
 ### 1단계: 핵심 기능 (MVP)
 - [x] 프로젝트 구조 및 Git 저장소 설정
@@ -54,9 +103,6 @@
 
 ### 8단계: 스토어 정책 준수 및 최적화 (Future)
 - [x] `runFullTrust` 권한 제거 가능성 검토 (Win32 앱 특성상 유지, API 의존성 최소화 완료)
-    - [x] **알림(Toast)**: PowerShell(`subprocess`) 의존성 제거 및 `winrt` 라이브러리 도입 검토
-    - [x] **API 호출**: `ctypes` 사용 최소화 및 매니페스트 기반 설정으로 대체
-    - [x] **파일 접근**: 표준 입출력 대신 UWP 호환 스토리지 API 사용 검토
 
 ### 9단계: 기능 확장 (Planned)
 - [x] **통계 대시보드**: 로그 데이터를 분석하여 일간/주간 집중 성과 시각화
@@ -91,6 +137,11 @@
 - [x] **데이터 관리**: CSV 내보내기 및 데이터 초기화, 데이터 저장 위치 변경(내 문서 폴더)
 - [x] **통계 고도화**: 시간대별 분석, 로그 수정/삭제, 인터랙션 개선
 - [x] **사용성 개선**: 콘솔 창 숨김, 종료 팝업 제거, 폴더 구조 최적화
+
+### 15단계: 지속 가능성 및 v2.0 준비 (v1.23)
+- [x] **후원 연동**: 메인 화면 및 팝업에 'Buy Me a Coffee' 배너 추가 (이미지 캐싱 적용)
+- [x] **정책 제어**: 환경변수(`BANNER_SPONSORED`, `AD_POPUP_POLICY`)로 배너 표시 여부 및 빈도 제어
+- [x] **안정성 강화**: 이미지 다운로드 예외 처리 및 단위 테스트 추가
 
 ## 📂 프로젝트 구조 (Project Structure)
 
@@ -141,3 +192,5 @@ python build.py
 
 -생성된 파일은 `dist/` 폴더에서 확인할 수 있습니다.
 +빌드가 완료되면 프로젝트 루트 폴더에 `GodModTimer.msix` 파일이 생성됩니다.
+*   **v1.23**: Added banner ads and sponsored popup.
+*   **v1.22**: Multi-language support & Enhanced statistics.

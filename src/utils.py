@@ -10,6 +10,8 @@ from tkinter import filedialog, messagebox
 import webbrowser
 import sqlite3
 import math
+import urllib.request
+from PIL import Image, ImageTk
 
 def play_sound():
     """운영체제에 맞는 알림음을 재생합니다 (시스템 비프음 사용)."""
@@ -426,3 +428,23 @@ def get_side_position(root, width, height, offset=10):
 def open_url(url):
     """기본 웹 브라우저에서 URL을 엽니다."""
     webbrowser.open(url)
+
+def load_remote_image(filename, url, size):
+    """URL에서 이미지를 다운로드(캐싱)하고 PhotoImage 객체를 반환합니다."""
+    try:
+        image_path = get_user_data_path(filename)
+        
+        if not os.path.exists(image_path) or os.path.getsize(image_path) == 0:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=3) as u:
+                data = u.read()
+                if data:
+                    with open(image_path, "wb") as f:
+                        f.write(data)
+        
+        if os.path.exists(image_path) and os.path.getsize(image_path) > 0:
+            pil_image = Image.open(image_path).resize(size, Image.LANCZOS)
+            return ImageTk.PhotoImage(pil_image)
+    except Exception:
+        pass
+    return None
