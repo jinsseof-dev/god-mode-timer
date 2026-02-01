@@ -139,6 +139,33 @@ class TestTimerEngine(unittest.TestCase):
         self.assertFalse(self.engine.is_running)
         self.assertEqual(self.engine.current_time, self.engine.work_min * 60)
 
+    def test_reset_break_mode(self):
+        """휴식 모드(짧은/긴)에서 리셋 시 올바른 시간으로 초기화되는지 검증"""
+        # 1. 짧은 휴식
+        self.engine.mode = "break"
+        self.engine.break_type = "short"
+        self.engine.short_break_min = 5
+        self.engine.current_time = 10  # 시간이 흐른 상태
+        self.engine.start()
+        
+        self.engine.reset()
+        
+        self.assertFalse(self.engine.is_running)
+        self.assertEqual(self.engine.target_duration, 5 * 60)
+        self.assertEqual(self.engine.current_time, 5 * 60)
+        
+        # 2. 긴 휴식
+        self.engine.break_type = "long"
+        self.engine.long_break_min = 15
+        self.engine.current_time = 10
+        self.engine.start()
+        
+        self.engine.reset()
+        
+        self.assertFalse(self.engine.is_running)
+        self.assertEqual(self.engine.target_duration, 15 * 60)
+        self.assertEqual(self.engine.current_time, 15 * 60)
+
     def test_set_duration(self):
         """수동 시간 설정 검증"""
         self.engine.set_duration(10)
@@ -176,6 +203,50 @@ class TestTimerEngine(unittest.TestCase):
         self.assertEqual(self.engine.mode, "break")
         self.assertTrue(self.engine.is_running) # 즉시 시작됨
         self.assertEqual(self.engine.target_duration, self.engine.short_break_min * 60)
+
+    def test_update_settings_break_mode(self):
+        """휴식 모드(짧은/긴)에서 설정 변경 시 시간이 즉시 동기화되는지 검증"""
+        # 1. 짧은 휴식 모드
+        self.engine.mode = "break"
+        self.engine.break_type = "short"
+        self.engine.short_break_min = 5
+        self.engine.target_duration = 5 * 60
+        self.engine.current_time = 5 * 60
+        
+        # 설정 변경 (5분 -> 10분)
+        self.engine.update_settings(work_min=25, short_break_min=10, long_break_min=15, interval=4, auto_start=False)
+        self.assertEqual(self.engine.target_duration, 10 * 60)
+        self.assertEqual(self.engine.current_time, 10 * 60)
+
+        # 2. 긴 휴식 모드
+        self.engine.break_type = "long"
+        self.engine.long_break_min = 15
+        self.engine.target_duration = 15 * 60
+        self.engine.current_time = 15 * 60
+        
+        # 설정 변경 (15분 -> 30분)
+        self.engine.update_settings(work_min=25, short_break_min=10, long_break_min=30, interval=4, auto_start=False)
+        self.assertEqual(self.engine.target_duration, 30 * 60)
+        self.assertEqual(self.engine.current_time, 30 * 60)
+
+    def test_toggle(self):
+        """토글(시작/정지) 기능 검증"""
+        # 정지 -> 시작
+        self.engine.toggle()
+        self.assertTrue(self.engine.is_running)
+        
+        # 시작 -> 정지
+        self.engine.toggle()
+        self.assertFalse(self.engine.is_running)
+
+    def test_set_duration_break_mode(self):
+        """휴식 모드에서 수동 시간 설정 시 work_min은 변경되지 않아야 함"""
+        self.engine.mode = "break"
+        self.engine.work_min = 25
+        self.engine.set_duration(10)
+        
+        self.assertEqual(self.engine.target_duration, 10 * 60)
+        self.assertEqual(self.engine.work_min, 25) # 변경되지 않아야 함
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

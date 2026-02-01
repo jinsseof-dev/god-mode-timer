@@ -593,6 +593,15 @@ def open_settings_window(app):
         app.update_opacity()
         app.update_theme_colors()
         app.apply_theme()
+        
+        # 엔진에 변경된 설정 적용
+        app.engine.update_settings(
+            app.setting_work_min,
+            app.setting_short_break_min,
+            app.setting_long_break_min,
+            app.setting_long_break_interval,
+            app.setting_auto_start
+        )
 
         app.reset_timer()
 

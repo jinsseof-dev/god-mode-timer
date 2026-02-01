@@ -3,6 +3,7 @@ import time
 class TimerEngine:
     def __init__(self):
         self.mode = "work"  # "work" or "break"
+        self.break_type = None  # "short" or "long"
         self.is_running = False
         self.current_time = 25 * 60
         self.target_duration = 25 * 60
@@ -23,11 +24,14 @@ class TimerEngine:
         self.long_break_interval = interval
         self.auto_start = auto_start
         
-        # 집중 모드이고 정지 상태이며, 시간이 초기 상태(꽉 찬 상태)라면 설정 변경 즉시 반영
-        if not self.is_running and self.mode == "work":
-             if abs(self.current_time - self.target_duration) < 1.0:
-                 self.target_duration = self.work_min * 60
-                 self.current_time = self.target_duration
+        # 설정 변경 즉시 반영 (정지 상태이고 꽉 찬 상태일 때)
+        if not self.is_running and abs(self.current_time - self.target_duration) < 1.0:
+            if self.mode == "work":
+                self.target_duration = self.work_min * 60
+            elif self.mode == "break":
+                # 현재 휴식 타입에 맞춰 시간 업데이트
+                self.target_duration = (self.long_break_min if self.break_type == "long" else self.short_break_min) * 60
+            self.current_time = self.target_duration
 
     def start(self):
         if not self.is_running:
@@ -47,7 +51,11 @@ class TimerEngine:
         self.stop()
         if self.mode == "work":
             self.target_duration = self.work_min * 60
-        # 휴식 모드일 경우, 현재 설정된 휴식 시간(짧은/긴)으로 리셋
+        elif self.mode == "break":
+            if self.break_type == "long":
+                self.target_duration = self.long_break_min * 60
+            else:
+                self.target_duration = self.short_break_min * 60
         self.current_time = self.target_duration
 
     def tick(self):
@@ -82,9 +90,11 @@ class TimerEngine:
         # 긴 휴식 여부 결정
         if today_count > 0 and today_count % self.long_break_interval == 0:
             self.target_duration = self.long_break_min * 60
+            self.break_type = "long"
             is_long = True
         else:
             self.target_duration = self.short_break_min * 60
+            self.break_type = "short"
             is_long = False
             
         self.current_time = self.target_duration
@@ -93,6 +103,7 @@ class TimerEngine:
     def switch_to_work(self):
         """집중 모드로 전환합니다."""
         self.mode = "work"
+        self.break_type = None
         self.target_duration = self.work_min * 60
         self.current_time = self.target_duration
 

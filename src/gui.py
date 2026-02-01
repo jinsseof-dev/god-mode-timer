@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
-from utils import play_sound, log_godmode, show_toast, play_tick_sound, parse_logs, get_gamification_stats
+from utils import play_sound, log_godmode, show_toast, play_tick_sound, parse_logs, get_gamification_stats, open_url, load_remote_image
 from taskbar import WindowsTaskbar
 from common import resource_path, get_user_data_path
 from settings_window import open_settings_window
@@ -28,7 +28,7 @@ class GodModeApp:
 
         # --- 상태 변수 및 설정 로드 (UI 스케일 계산 전 선행) ---
         self.load_env()
-        self.app_version = os.environ.get("VERSION", "v1.22.0.0")
+        self.app_version = os.environ.get("VERSION", "v1.23.0.0")
         self.is_running = False
         self.setting_always_on_top = True
         self.setting_auto_start = False
@@ -121,6 +121,37 @@ class GodModeApp:
         self.update_opacity()
         self.root.configure(bg=self.colors["bg"])
         
+        # --- 광고 배너 영역 (상단) ---
+        self.ad_frame = None
+        # 환경변수 BANNER_SPONSORED가 true일 때만 표시
+        if os.environ.get("BANNER_SPONSORED", "false").lower() == "true":
+            # 추후 WebView/AdSense 연동을 위한 컨테이너
+            self.ad_frame = tk.Frame(root, bg=self.colors["bg"])
+            self.ad_frame.pack(side=tk.TOP, fill=tk.X)
+            
+            ad_url = "https://www.buymeacoffee.com/jinsseofdev"
+            
+            # 이미지 로드 시도
+            tk_image = load_remote_image(
+                "bmc_button_yellow.png",
+                "https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png",
+                (180, 50)
+            )
+            self.bmc_banner_image = tk_image # GC 방지
+
+            if tk_image:
+                self.ad_label = tk.Label(self.ad_frame, image=tk_image, bg=self.colors["bg"], cursor="hand2")
+                self.ad_label.pack(pady=2)
+                self.ad_label.bind("<Button-1>", lambda e: open_url(ad_url))
+            else:
+                # 이미지 로드 실패 시 텍스트 배너 표시 (기존 로직)
+                self.ad_label = tk.Label(self.ad_frame, text=self.loc.get("banner_coffee_support", default="☕ Support God-Mode Timer on Buy Me a Coffee"), 
+                                         font=("Helvetica", 9, "bold"), bg="#FFD700", fg="#333333", cursor="hand2")
+                self.ad_label.pack(fill=tk.BOTH, expand=True, ipady=4)
+                self.ad_label.bind("<Button-1>", lambda e: open_url(ad_url))
+                self.ad_label.bind("<Enter>", lambda e: self.ad_label.config(bg="#FFE066"))
+                self.ad_label.bind("<Leave>", lambda e: self.ad_label.config(bg="#FFD700"))
+
         # 보조 버튼 프레임 (통계, 설정, 미니모드) - 하단 배치 (가장 먼저 pack하여 공간 확보)
         self.btn_frame = tk.Frame(root, bg=self.colors["bg"])
         self.btn_frame.pack(side=tk.BOTTOM, pady=(0, 15))
@@ -234,14 +265,27 @@ class GodModeApp:
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             env_path = os.path.join(base_dir, ".env")
             if os.path.exists(env_path):
-                with open(env_path, "r", encoding="utf-8") as f:
-                    for line in f:
+                # 인코딩 호환성을 위해 여러 인코딩 시도 (utf-8, cp949 등)
+                encodings = ["utf-8", "cp949", "latin-1"]
+                lines = None
+                
+                for enc in encodings:
+                    try:
+                        with open(env_path, "r", encoding=enc) as f:
+                            lines = f.readlines()
+                        break
+                    except (UnicodeDecodeError, OSError):
+                        continue
+                
+                if lines:
+                    for line in lines:
                         line = line.strip()
                         if not line or line.startswith("#"): continue
                         if "=" in line:
                             key, value = line.split("=", 1)
                             os.environ[key.strip()] = value.strip().strip('"').strip("'")
         except Exception:
+            # .env 로드 중 발생하는 모든 예외를 무시하고 진행 (기본값 사용)
             pass
 
     def update_scale_factor(self):
@@ -555,6 +599,8 @@ class GodModeApp:
             # UI 숨기기
             self.btn_frame.pack_forget()
             self.task_frame.pack_forget()
+            if self.ad_frame:
+                self.ad_frame.pack_forget()
             
             # 윈도우 설정 (타이틀바 제거, 크기 축소)
             self.root.overrideredirect(True)
@@ -623,6 +669,8 @@ class GodModeApp:
         self.update_topmost_status()
         
         # UI 복원
+        if self.ad_frame:
+            self.ad_frame.pack(side=tk.TOP, fill=tk.X, before=self.canvas)
         self.btn_frame.pack(side=tk.BOTTOM, before=self.canvas, pady=(0, 15))
         self.update_task_input_visibility()
         self.update_control_buttons_visibility()
@@ -757,6 +805,7 @@ class GodModeApp:
             # self.noise_player.stop()
             
             # 집중 완료 시 광고(후원) 팝업 표시 (2회마다)
+            # AD_POPUP_POLICY는 이제 팝업 내부의 배너 표시 여부만 제어함
             if self.today_count > 0 and self.today_count % 2 == 0:
                 show_ad_window(self)
             
@@ -966,6 +1015,10 @@ class GodModeApp:
                 self.setting_long_break_interval,
                 self.setting_auto_start
             )
+            
+            # 설정 변경 시 즉시 UI 반영 (타이머가 초기 상태일 경우 시간이 변경됨)
+            if hasattr(self, 'canvas') and self.canvas:
+                self.draw_timer()
         except Exception:
             self.restore_default_settings()
 
@@ -1268,6 +1321,11 @@ class GodModeApp:
         self.canvas.configure(bg=self.colors["bg"])
         self.btn_frame.configure(bg=self.colors["bg"])
         
+        if self.ad_frame:
+            self.ad_frame.configure(bg=self.colors["bg"])
+            if hasattr(self, 'bmc_banner_image') and self.bmc_banner_image:
+                self.ad_label.configure(bg=self.colors["bg"])
+        
         self.start_button.configure(fg=self.colors["btn_fg"])
         self.settings_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
         self.stats_button.configure(bg=self.colors["btn_bg"], fg=self.colors["btn_fg"])
@@ -1314,6 +1372,11 @@ class GodModeApp:
         if not self.task_var.get() or self.task_entry.cget('fg') == self.colors['fg_sub']:
             self.task_var.set("")
             self.on_task_focus_out(None)
+            
+        # 배너 텍스트 업데이트
+        if self.ad_frame and hasattr(self, 'ad_label'):
+            if not (hasattr(self, 'bmc_banner_image') and self.bmc_banner_image):
+                self.ad_label.config(text=self.loc.get("banner_coffee_support", default="☕ Support God-Mode Timer on Buy Me a Coffee"))
             
         # 2. 통계 창이 열려있다면 언어 새로고침
         if hasattr(self, 'stats_window') and self.stats_window and self.stats_window.winfo_exists():
